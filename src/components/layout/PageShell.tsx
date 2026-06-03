@@ -27,9 +27,7 @@ export function PageShell({
           )}
         </div>
         {actions && (
-          <div className="flex w-full gap-2 overflow-x-auto hide-scrollbar pb-0.5 sm:w-auto sm:flex-wrap sm:justify-end">
-            {actions}
-          </div>
+          <div className="w-full min-w-0 sm:w-auto">{actions}</div>
         )}
       </div>
       {children}

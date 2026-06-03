@@ -2,9 +2,11 @@ import { UserCircle2, Settings, LogOut } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { HeaderSearch } from "@/components/layout/HeaderSearch";
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { getQueueItems } from "@/lib/indexeddb";
 import { seedOfflineSampleContact } from "@/lib/contactStorage";
 import { useUserSettings } from "@/hooks/useUserSettings";
+import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,7 +15,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useNavigate } from "@tanstack/react-router";
 import {
   CONNECTION_MODE_CHANGED,
   getConnectionMode,
@@ -26,6 +27,16 @@ export function TopBar() {
   const [pendingCount, setPendingCount] = useState(0);
   const { fullName: profileName, initials: profileInitials } = useUserSettings();
   const navigate = useNavigate();
+
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isContacts = pathname.startsWith("/contacts");
+
+  const contactsQuery = useRouterState({
+    select: (s) => {
+      if (!s.location.pathname.startsWith("/contacts")) return "";
+      return new URLSearchParams(s.location.search).get("q") ?? "";
+    },
+  });
 
   const isOnline = connectionMode === "online";
 
@@ -48,6 +59,14 @@ export function TopBar() {
     if (result.seeded) {
       window.dispatchEvent(new CustomEvent("cs-contacts-updated"));
     }
+  };
+
+  const goToContactsSearch = (value: string) => {
+    const q = value.trim();
+    void navigate({
+      to: "/contacts",
+      search: q ? { q } : {},
+    });
   };
 
   useEffect(() => {
@@ -99,8 +118,30 @@ export function TopBar() {
         />
       </div>
 
-      <div className="flex min-w-0 justify-center px-1 sm:px-2">
-        <HeaderSearch className="w-full max-w-md" />
+      <div
+        className={cn(
+          "flex min-w-0 flex-1 px-1 sm:px-2",
+          !isContacts && "max-md:hidden",
+          "justify-center md:justify-start",
+        )}
+      >
+        <HeaderSearch
+          className={cn(
+            "w-full max-w-md",
+            isContacts ? "max-md:max-w-none" : "md:max-w-sm lg:max-w-md",
+          )}
+          value={isContacts ? contactsQuery : undefined}
+          onChange={(value) => {
+            if (isContacts) {
+              void navigate({
+                to: "/contacts",
+                search: { q: value.trim() || undefined },
+                replace: true,
+              });
+            }
+          }}
+          onSubmit={goToContactsSearch}
+        />
       </div>
 
       <div className="flex items-center justify-end gap-2">

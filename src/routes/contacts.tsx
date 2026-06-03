@@ -1,7 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ContactsPage } from "@/pages/ContactsPage";
+import { z } from "zod";
+
+const contactsSearchSchema = z.object({
+  q: z.string().optional().catch(""),
+});
 
 export const Route = createFileRoute("/contacts")({
+  validateSearch: contactsSearchSchema,
   head: () => ({
     meta: [
       { title: "Contact directory · CardSync AI" },

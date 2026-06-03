@@ -96,11 +96,11 @@ export function QueueAnalyticsSection({
         </span>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-5 lg:gap-5">
-        <div className="lg:col-span-3">
-          <QueueSaveBarChart data={chartData} />
+      <div className="grid min-h-60 gap-4 lg:grid-cols-5 lg:items-stretch lg:gap-5">
+        <div className="flex min-h-60 flex-col lg:col-span-3">
+          <QueueSaveBarChart data={chartData} className="flex-1" />
         </div>
-        <div className="lg:col-span-2">
+        <div className="flex min-h-60 flex-col lg:col-span-2">
           <QueuePipelineInsights contacts={contacts} queueItems={queueItems} />
         </div>
       </div>

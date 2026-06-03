@@ -1,4 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { Search, Filter, RefreshCw, Mail, MessageCircle, Plus, Trash2, Send, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,8 @@ import { getConnectionMode } from "@/lib/connectionMode";
 import { buildZohoLeadLookup, isDuplicateOfZohoLead } from "@/lib/contactListMerge";
 import { getQueueItems, removeQueueItem, updateQueueItem, type QueueItem } from "@/lib/indexeddb";
 import type { ContactStatus } from "@/lib/contactStatus";
+import { Route as ContactsRoute } from "@/routes/contacts";
+import { cn } from "@/lib/utils";
 
 function isLocalStorageSource(source: Contact["source"]): boolean {
   return source === "localdb" || source === "indexeddb";
@@ -53,11 +56,15 @@ const tabs: { key: "all" | ContactStatus; label: string }[] = [
 
 export function ContactsPage() {
   const { confirm } = useConfirmModal();
+  const navigate = useNavigate({ from: ContactsRoute.fullPath });
+  const { q = "" } = ContactsRoute.useSearch();
+  const setQ = (next: string) => {
+    void navigate({ search: { q: next.trim() || undefined }, replace: true });
+  };
   const [contactsList, setContactsList] = useState<Contact[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"all" | ContactStatus>("all");
-  const [q, setQ] = useState("");
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [isSyncingZoho, setIsSyncingZoho] = useState(false);
@@ -395,6 +402,8 @@ export function ContactsPage() {
     };
   }, [contactsList]);
 
+  const showSavePending = pendingZohoCount > 0;
+
   return (
     <div className="page-bottom-safe lg:pb-0">
     <PageShell
@@ -405,36 +414,42 @@ export function ContactsPage() {
           : PAGE.contacts.description
       }
       actions={
-        <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2">
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
           <Button
             variant="outline"
             onClick={() => void fetchContactsList()}
             disabled={isLoading}
-            className="h-10 shrink-0 rounded-xl"
+            className="h-10 w-full rounded-xl sm:w-auto"
           >
             <RefreshCw className={`mr-2 h-4 w-4 shrink-0 ${isLoading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
-          {pendingZohoCount > 0 && (
+          {showSavePending && (
             <Button
               variant="outline"
               onClick={() => void handleSyncAllPendingToZoho()}
               disabled={isSyncingZoho || isLoading}
-              className="h-10 shrink-0 rounded-xl"
+              className="h-10 w-full rounded-xl sm:w-auto"
             >
               {isSyncingZoho ? (
                 <Loader2 className="mr-2 h-4 w-4 shrink-0 animate-spin" />
               ) : (
                 <Send className="mr-2 h-4 w-4 shrink-0" />
               )}
-              Save on device
+              <span className="sm:hidden">Save</span>
+              <span className="hidden sm:inline">Save on device</span>
             </Button>
           )}
-          <Button variant="outline" className="h-10 shrink-0 rounded-xl">
+          <Button variant="outline" className="h-10 w-full rounded-xl sm:w-auto">
             <Filter className="mr-2 h-4 w-4 shrink-0" />
             Filters
           </Button>
-          <Button className="h-10 shrink-0 rounded-xl bg-gradient-primary shadow-glow">
+          <Button
+            className={cn(
+              "h-10 w-full rounded-xl bg-gradient-primary shadow-glow sm:w-auto",
+              !showSavePending && "col-span-2 sm:col-span-1",
+            )}
+          >
             <Plus className="mr-2 h-4 w-4 shrink-0" />
             New contact
           </Button>
@@ -443,7 +458,7 @@ export function ContactsPage() {
     >
       <Card className="rounded-2xl border-border/60 p-3 shadow-soft sm:p-5">
         <div className="flex flex-col gap-3">
-          <div className="relative w-full">
+          <div className="relative hidden w-full md:block">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={q}
