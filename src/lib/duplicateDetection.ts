@@ -1,6 +1,4 @@
-import { API_BASE_URL } from "@/lib/api";
 import type { LeadPayload } from "@/lib/cardImage";
-import { isIndexedDbStorage } from "@/lib/storageConfig";
 import { listStoredContacts } from "@/lib/indexeddb";
 
 export type StoredContact = {
@@ -65,29 +63,8 @@ function findDuplicatesLocally(
 }
 
 export async function checkForDuplicates(payload: LeadPayload): Promise<DuplicateCheckResult> {
-  if (isIndexedDbStorage()) {
-    const contacts = await listStoredContacts();
-    return { duplicates: findDuplicatesLocally(contacts as StoredContact[], payload) };
-  }
-
-  try {
-    const response = await fetch(`${API_BASE_URL}/contacts/check-duplicates`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        fullName: payload.fullName,
-        company: payload.company,
-        phone: payload.phone,
-        email: payload.email,
-      }),
-    });
-    if (!response.ok) {
-      return { duplicates: [] };
-    }
-    return response.json();
-  } catch {
-    return { duplicates: [] };
-  }
+  const contacts = await listStoredContacts();
+  return { duplicates: findDuplicatesLocally(contacts as StoredContact[], payload) };
 }
 
 export function diffContacts(

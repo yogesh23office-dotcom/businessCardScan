@@ -72,7 +72,7 @@ const emptyPickers = (): PickerState => ({
   social: [],
 });
 
-export const LeadReviewPage = () => {
+export const ReviewPage = () => {
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const pendingPayloadRef = useRef<LeadPayload | null>(null);

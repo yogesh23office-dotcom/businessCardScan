@@ -1,14 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { LeadReviewPage } from "@/pages/LeadReviewPage";
+import { ReviewPage } from "@/pages/ReviewPage";
+
 export const Route = createFileRoute("/review")({
   head: () => ({
     meta: [
       { title: "Review extracted details · CardSync AI" },
       {
         name: "description",
-        content: "Review OCR extracted business card details and save to local PostgreSQL.",
+        content: "Review OCR extracted business card details before saving.",
       },
     ],
   }),
-  component: LeadReviewPage,
+  component: ReviewPage,
 });

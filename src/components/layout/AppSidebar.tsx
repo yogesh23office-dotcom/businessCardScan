@@ -1,15 +1,10 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import {
-  Sparkles,
-  ChevronsUpDown,
-} from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { sidebarItems } from "@/constants/sidebarItems";
-import { useUserSettings } from "@/hooks/useUserSettings";
 
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -28,7 +23,7 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const path = useRouterState({ select: (r) => r.location.pathname });
-  const { fullName, email, initials } = useUserSettings();
+
   const isActive = (url: string) => {
     if (url === "/scan") {
       return path === "/scan" || path === "/" || path.startsWith("/review");
@@ -39,7 +34,7 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon" className="border-r border-border/60">
       <SidebarHeader className="px-3 pt-4">
-        <Link to="/" className="flex items-center gap-2.5 px-2 py-1.5">
+        <Link to="/scan" className="flex items-center gap-2.5 px-2 py-1.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-primary shadow-glow">
             <Sparkles className="h-4 w-4 text-primary-foreground" />
           </div>
@@ -80,26 +75,6 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-
-      {/*       <SidebarFooter className="p-3">
-        <Link
-          to="/settings"
-          className="flex items-center gap-3 rounded-xl border border-border/60 bg-card/60 p-2.5 shadow-soft transition hover:bg-muted/40"
-        >
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-primary text-sm font-semibold text-primary-foreground">
-            {initials}
-          </div>
-          {!collapsed && (
-            <>
-              <div className="min-w-0 flex-1 leading-tight">
-                <div className="truncate text-sm font-medium">{fullName}</div>
-                <div className="truncate text-[11px] text-muted-foreground">{email}</div>
-              </div>
-              <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
-            </>
-          )}
-        </Link>
-      </SidebarFooter> */}
     </Sidebar>
   );
 }

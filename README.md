@@ -1,6 +1,6 @@
 # CardSync AI — Frontend
 
-TanStack Start + React UI extracted from the monorepo `main/` folder. Talks to the Python API via `VITE_API_URL` (dev proxy targets `http://127.0.0.1:5000` by default).
+TanStack Start + React UI — **client-only** build: contacts and queue live in **IndexedDB**, OCR runs in the **browser** (Tesseract.js). No backend API required for local dev.
 
 See [docs/STRUCTURE.md](docs/STRUCTURE.md) for how `routes/`, `pages/`, `layouts/`, and `components/` are organized.
 

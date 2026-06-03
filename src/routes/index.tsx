@@ -1,6 +1,5 @@
-import { createFileRoute, Navigate } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-// Dashboard is now intentionally minimal: direct access to the Scan flow.
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
@@ -10,6 +9,7 @@ export const Route = createFileRoute("/")({
       { property: "og:description", content: "AI extracts contact details from any business card in seconds." },
     ],
   }),
-  component: () => <Navigate to="/scan" replace />,
+  beforeLoad: () => {
+    throw redirect({ to: "/scan", replace: true });
+  },
 });
-
