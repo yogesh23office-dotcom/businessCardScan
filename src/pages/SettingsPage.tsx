@@ -2,6 +2,7 @@
 import {
   Bell,
   Cookie,
+  ExternalLink,
   FileText,
   Inbox,
   Loader2,
@@ -22,8 +23,7 @@ import { ProfileSettingsCard } from "@/components/settings/ProfileSettingsCard";
 import { PAGE } from "@/constants/navigation";
 import {
   COOKIE_POLICY_SECTIONS,
-  PRIVACY_POLICY_SECTIONS,
-  TERMS_AND_CONDITIONS_SECTIONS,
+  LEGAL_PAGE_URLS,
 } from "@/constants/legalContent";
 import { LegalDocumentModal } from "@/components/legal/LegalDocumentModal";
 import { toast } from "sonner";
@@ -81,8 +81,6 @@ export function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isWiping, setIsWiping] = useState(false);
   const [isClearingQueue, setIsClearingQueue] = useState(false);
-  const [privacyOpen, setPrivacyOpen] = useState(false);
-  const [termsOpen, setTermsOpen] = useState(false);
   const [cookiesOpen, setCookiesOpen] = useState(false);
 
   const initials = useMemo(() => getUserInitials(profile.fullName), [profile.fullName]);
@@ -170,18 +168,6 @@ export function SettingsPage() {
 
   return (
     <PageShell title={PAGE.preferences.title} description={PAGE.preferences.description}>
-      <LegalDocumentModal
-        open={privacyOpen}
-        onOpenChange={setPrivacyOpen}
-        title="Privacy Policy"
-        sections={PRIVACY_POLICY_SECTIONS}
-      />
-      <LegalDocumentModal
-        open={termsOpen}
-        onOpenChange={setTermsOpen}
-        title="Terms & Conditions"
-        sections={TERMS_AND_CONDITIONS_SECTIONS}
-      />
       <LegalDocumentModal
         open={cookiesOpen}
         onOpenChange={setCookiesOpen}
@@ -332,7 +318,8 @@ export function SettingsPage() {
             <Shield className="h-4 w-4 text-primary" /> Legal & cookies
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
-            Terms, privacy, and cookie preferences for using CardSync on this device.
+            Terms and privacy open as public pages on this site (suitable for Meta and business
+            verification). Cookie preferences are managed below.
           </p>
           <div className="mt-5 space-y-3">
             <SettingRow
@@ -351,23 +338,27 @@ export function SettingsPage() {
             />
           </div>
           <div className="mt-5 flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="rounded-xl"
-              onClick={() => setTermsOpen(true)}
-            >
-              <Scale className="mr-2 h-4 w-4" />
-              Terms
+            <Button variant="outline" size="sm" className="rounded-xl" asChild>
+              <a
+                href={LEGAL_PAGE_URLS.terms}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Scale className="mr-2 h-4 w-4" />
+                Terms
+                <ExternalLink className="ml-1 h-3.5 w-3.5 opacity-60" />
+              </a>
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="rounded-xl"
-              onClick={() => setPrivacyOpen(true)}
-            >
-              <FileText className="mr-2 h-4 w-4" />
-              Privacy
+            <Button variant="outline" size="sm" className="rounded-xl" asChild>
+              <a
+                href={LEGAL_PAGE_URLS.privacy}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Privacy
+                <ExternalLink className="ml-1 h-3.5 w-3.5 opacity-60" />
+              </a>
             </Button>
             <Button
               variant="outline"

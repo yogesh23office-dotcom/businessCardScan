@@ -1,30 +1,35 @@
 export type LegalSection = { heading: string; body: string };
 
+/** Public static pages on Netlify (also used for Meta / business verification URLs). */
+export const LEGAL_PAGE_URLS = {
+  privacy: "/privacy-policy.html",
+  terms: "/terms-and-conditions.html",
+} as const;
+
+export const LEGAL_CONTACT_EMAIL = "yogi2324@gmail.com";
+
 export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
   {
-    heading: "Overview",
+    heading: "Information we collect",
     body:
-      "CardSync AI processes business card images and contact details on your device. This policy explains what we store locally, how long it is kept, and the choices you control in Preferences.",
+      "We collect information from business cards scanned by users, including names, phone numbers, email addresses, company names, and job titles.",
   },
   {
-    heading: "Data we store on your device",
+    heading: "How we use information",
     body:
-      "Contacts, scan queue entries, profile preferences, and OCR results are saved in your browser (IndexedDB and local storage). We do not transmit this data to our servers in this frontend-only build unless you connect an external service in a future release.",
+      "This information is used to extract contact details, save contacts to CRM systems such as Zoho CRM, and send communications through services such as WhatsApp.",
   },
   {
-    heading: "How we use your information",
-    body:
-      "Information is used solely to capture leads, display your directory, manage the sync queue, and show in-app notifications you have enabled. We do not sell personal data.",
+    heading: "No sale of personal data",
+    body: "We do not sell personal information to third parties.",
   },
   {
-    heading: "Your rights",
-    body:
-      "You may export or delete data at any time via Preferences → Danger zone. You can disable notifications, limit cookies, and turn off optional analytics storage in Preferences.",
+    heading: "Security and purpose",
+    body: "Data is processed securely and only for the purposes requested by the user.",
   },
   {
     heading: "Contact",
-    body:
-      "For privacy questions, email privacy@cardsync.ai. We will respond within a reasonable timeframe.",
+    body: `Users may contact us regarding data-related requests at: ${LEGAL_CONTACT_EMAIL}`,
   },
 ];
 
@@ -32,42 +37,31 @@ export const TERMS_AND_CONDITIONS_SECTIONS: LegalSection[] = [
   {
     heading: "Agreement",
     body:
-      "By using CardSync AI you agree to these Terms and Conditions. If you do not agree, do not use the application. We may update these terms; continued use after changes constitutes acceptance.",
+      "By using CardSync AI you agree to these Terms and Conditions. If you do not agree, do not use the application.",
   },
   {
     heading: "Service description",
     body:
-      "CardSync AI helps you capture business card images, extract contact details with on-device OCR, and manage leads in a local directory and sync queue. This build runs in your browser without a connected backend unless stated otherwise.",
+      "CardSync AI lets you scan business cards, extract contact details, save leads to Zoho CRM, and send follow-up communications through email and WhatsApp.",
   },
   {
     heading: "Your responsibilities",
     body:
-      "You are responsible for the accuracy of data you enter, obtaining consent before storing others’ personal information, and complying with applicable privacy and marketing laws. Do not use the app for unlawful purposes.",
+      "You are responsible for the accuracy of data you save, obtaining consent before storing others’ personal information, and complying with applicable privacy and marketing laws.",
   },
   {
-    heading: "Intellectual property",
+    heading: "Privacy",
     body:
-      "CardSync AI, its branding, and software remain our property or our licensors’. You receive a limited, non-exclusive licence to use the app for your internal business purposes.",
+      "We do not sell personal information to third parties. Data is processed securely and only for the purposes you request.",
   },
   {
     heading: "Disclaimer",
     body:
-      "The app is provided “as is”. OCR results may contain errors; always review extracted fields before saving. We do not guarantee uninterrupted or error-free operation.",
-  },
-  {
-    heading: "Limitation of liability",
-    body:
-      "To the fullest extent permitted by law, we are not liable for indirect, incidental, or consequential damages arising from use of the app. Our total liability is limited to the amount you paid for the service in the twelve months before the claim, or zero for free use.",
-  },
-  {
-    heading: "Termination",
-    body:
-      "You may stop using the app at any time and delete local data via Preferences. We may suspend access if you breach these terms.",
+      "The app is provided “as is”. Always review extracted fields before saving or sending messages.",
   },
   {
     heading: "Contact",
-    body:
-      "Questions about these terms: legal@cardsync.ai.",
+    body: `Questions about these terms or data requests: ${LEGAL_CONTACT_EMAIL}`,
   },
 ];
 
