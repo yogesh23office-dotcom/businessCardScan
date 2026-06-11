@@ -2,8 +2,6 @@ import { toast } from "sonner";
 import type { ZohoSyncResult } from "@/lib/contactApi";
 import type { UserSettings } from "@/lib/settingsStorage";
 
-const WHATSAPP_VISIBILITY_HINT_KEY = "cs-whatsapp-visibility-hint-shown";
-
 /** Show thank-you email/WhatsApp result after Zoho sync (from API response body). */
 export function notifyOutreachAfterSync(
   settings: UserSettings,
@@ -43,44 +41,11 @@ export function notifyOutreachAfterSync(
   if (settings.whatsappNotificationsEnabled) {
     if (result.whatsappSent) {
       const to = result.whatsappTo ? ` to ${result.whatsappTo}` : "";
-      const delivery = (result.whatsappDeliveryStatus || "").toLowerCase();
-
-      if (delivery === "failed") {
-        toast.error(`WhatsApp delivery failed${to}. Check Meta Message logs.`);
-        return;
-      }
-
-      if (delivery === "delivered" || delivery === "read") {
-        toast.success(`Thank-you WhatsApp delivered${to}.`, {
-          description:
-            "Recipient may find it under WhatsApp Updates. Search BusinessCardScanner or +91 74483 64850.",
-          duration: 8000,
-        });
-        return;
-      }
-
-      toast.success(`Thank-you WhatsApp queued${to}.`, {
-        description:
-          "Meta accepted the send. Recipient should check WhatsApp Updates (not only Chats) and search BusinessCardScanner or +91 74483 64850.",
-        duration: 10000,
-      });
-
-      if (typeof window !== "undefined" && !sessionStorage.getItem(WHATSAPP_VISIBILITY_HINT_KEY)) {
-        sessionStorage.setItem(WHATSAPP_VISIBILITY_HINT_KEY, "1");
-        toast.info("WhatsApp tip", {
-          description:
-            "First business messages often appear in the Updates tab until the contact replies to your business number.",
-          duration: 12000,
-        });
-      }
+      toast.success(`WhatsApp template sent${to}.`);
     } else if (result.whatsappError) {
       toast.error(`WhatsApp not sent: ${result.whatsappError}`);
     } else {
-      toast.warning(
-        "WhatsApp status unknown — the server did not return send confirmation. Check backend logs.",
-      );
+      toast.warning("WhatsApp send status unknown — check backend logs.");
     }
-  } else {
-    toast.info("WhatsApp off — turn on Auto thank-you on WhatsApp in Settings.");
   }
 }

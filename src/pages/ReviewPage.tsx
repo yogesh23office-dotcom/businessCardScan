@@ -40,16 +40,8 @@ import {
   syncContactToZohoStorage,
 } from "@/lib/contactStorage";
 import { checkForDuplicates, type DuplicateMatch } from "@/lib/duplicateDetection";
-import { PhoneVerifyField } from "@/components/review/PhoneVerifyField";
-import { WhatsAppChatQrModal } from "@/components/review/WhatsAppChatQrModal";
 import { notifyOutreachAfterSync } from "@/lib/outreachFeedback";
 import { loadUserSettings } from "@/lib/settingsStorage";
-import { API_BASE_URL } from "@/lib/api";
-import {
-  fetchWhatsAppVerifyStatus,
-  startWhatsAppVerify,
-  type WhatsAppChatReplyRegistration,
-} from "@/lib/whatsappChatLink";
 import { parseScanContact } from "@/lib/scanResult";
 import { scanFileAndStore } from "@/lib/scanPipeline";
 import { loadScanSession, readFileAsDataUrl, dataUrlToFile, isEmptyScanContact } from "@/lib/scanSession";
@@ -100,15 +92,6 @@ export const ReviewPage = () => {
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [ocrWarning, setOcrWarning] = useState<string | null>(null);
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
-  const [phoneVerified, setPhoneVerified] = useState(false);
-  const [verifiedForPhone, setVerifiedForPhone] = useState("");
-  const [phoneVerifying, setPhoneVerifying] = useState(false);
-  const [verifyQrOpen, setVerifyQrOpen] = useState(false);
-  const [verifyRegistration, setVerifyRegistration] =
-    useState<WhatsAppChatReplyRegistration | null>(null);
-  const verifyPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const verifyPollAttemptsRef = useRef(0);
-
   const { success, error, info } = useToast();
   const upload = useUpload();
   const form = useForm(leadFields, initialValues);
@@ -170,23 +153,8 @@ export const ReviewPage = () => {
     setOcrWarning(meta?.ocrWarning ?? null);
   }, [applyScanData]);
 
-  const stopVerifyPolling = () => {
-    if (verifyPollRef.current) {
-      clearInterval(verifyPollRef.current);
-      verifyPollRef.current = null;
-    }
-  };
-
-  useEffect(() => () => stopVerifyPolling(), []);
-
   const handleFormChange = (name: string, value: string) => {
     form.setValue(name, value);
-    if (name === "phoneNumber" && value.trim() !== verifiedForPhone) {
-      setPhoneVerified(false);
-      setVerifiedForPhone("");
-      stopVerifyPolling();
-      setPhoneVerifying(false);
-    }
     if (name === "firstName" || name === "lastName") {
       const first = name === "firstName" ? value : form.values.firstName;
       const last = name === "lastName" ? value : form.values.lastName;
@@ -197,17 +165,17 @@ export const ReviewPage = () => {
 
   const settings = loadUserSettings();
   const primaryPhone = form.values.phoneNumber.trim();
-  const whatsappVerifyRequired =
+  const whatsappTemplateOnSave =
     settings.whatsappNotificationsEnabled &&
     typeof navigator !== "undefined" &&
     navigator.onLine &&
     !isOfflineMode();
-  const saveBlockedByVerify = whatsappVerifyRequired && Boolean(primaryPhone) && !phoneVerified;
-  const saveHint = saveBlockedByVerify
-    ? "Verify the phone on WhatsApp first (tap Verify → contact scans QR on their phone)."
-    : whatsappVerifyRequired && !primaryPhone
-      ? "Add a phone number, then verify on WhatsApp before saving."
-      : undefined;
+  const saveHint =
+    whatsappTemplateOnSave && !primaryPhone
+      ? "Add a phone number to send the approved WhatsApp template on save."
+      : whatsappTemplateOnSave
+        ? "On save, your business number sends the approved WhatsApp template to this phone."
+        : undefined;
 
   const resolvedFullName =
     form.values.fullName.trim() ||
@@ -322,71 +290,8 @@ export const ReviewPage = () => {
     navigate({ to: "/contacts" });
   };
 
-  const startPhoneVerify = async () => {
-    const phone = form.values.phoneNumber.trim();
-    if (!phone) {
-      error("Enter a phone number before verifying.");
-      return;
-    }
-    if (!navigator.onLine) {
-      error("Go online to verify WhatsApp.");
-      return;
-    }
-
-    setPhoneVerifying(true);
-    stopVerifyPolling();
-    verifyPollAttemptsRef.current = 0;
-    try {
-      const registration = await startWhatsAppVerify({
-        ...buildPayload(),
-        phone,
-      });
-      setVerifyRegistration(registration);
-      setVerifyQrOpen(true);
-      info("Ask the contact to scan the QR on their phone and tap Send in WhatsApp.");
-
-      verifyPollRef.current = setInterval(() => {
-        void (async () => {
-          verifyPollAttemptsRef.current += 1;
-          try {
-            const status = await fetchWhatsAppVerifyStatus(phone);
-            if (status.verified) {
-              stopVerifyPolling();
-              setPhoneVerified(true);
-              setVerifiedForPhone(phone);
-              setPhoneVerifying(false);
-              success("WhatsApp verified — Save Lead is now enabled.");
-              return;
-            }
-            if (verifyPollAttemptsRef.current >= 60) {
-              stopVerifyPolling();
-              setPhoneVerifying(false);
-              error(
-                `Still waiting for WhatsApp. The phone in the form (${phone}) must match the device that scans the QR and taps Send. API: ${API_BASE_URL || "local proxy"}.`,
-              );
-            }
-          } catch (pollErr) {
-            if (verifyPollAttemptsRef.current >= 5) {
-              stopVerifyPolling();
-              setPhoneVerifying(false);
-              error(
-                pollErr instanceof Error
-                  ? pollErr.message
-                  : `Could not reach verify API (${API_BASE_URL || "local proxy"}).`,
-              );
-            }
-          }
-        })();
-      }, 2000);
-    } catch (err) {
-      setPhoneVerifying(false);
-      error(err instanceof Error ? err.message : "Could not start WhatsApp verify.");
-    }
-  };
-
   const outreachSkipWhatsApp = (settingsSnapshot = loadUserSettings()) =>
-    !settingsSnapshot.whatsappNotificationsEnabled ||
-    (whatsappVerifyRequired && !phoneVerified);
+    !settingsSnapshot.whatsappNotificationsEnabled;
 
   const persistContact = async (
     payload: LeadPayload,
@@ -528,11 +433,6 @@ export const ReviewPage = () => {
   };
 
   const saveLead = async () => {
-    if (saveBlockedByVerify) {
-      error("Verify the phone on WhatsApp before saving.");
-      return;
-    }
-
     const fullName = resolvedFullName;
     if (!fullName) {
       error("Please enter a name before saving.");
@@ -731,27 +631,15 @@ export const ReviewPage = () => {
                       key={field.name}
                       className={field.component === "TextAreaInput" ? "md:col-span-2" : ""}
                     >
-                      {field.name === "phoneNumber" && whatsappVerifyRequired ? (
-                        <PhoneVerifyField
-                          value={form.values.phoneNumber || ""}
-                          error={form.errors.phoneNumber}
-                          confidence={confidence.phoneNumber}
-                          verified={phoneVerified}
-                          verifying={phoneVerifying}
-                          onChange={(next) => handleFormChange("phoneNumber", next)}
-                          onVerify={startPhoneVerify}
-                        />
-                      ) : (
-                        <FieldRenderer
-                          field={field}
-                          value={form.values[field.name] || ""}
-                          error={form.errors[field.name]}
-                          confidence={
-                            field.confidenceKey ? confidence[field.confidenceKey] : undefined
-                          }
-                          onChange={handleFormChange}
-                        />
-                      )}
+                      <FieldRenderer
+                        field={field}
+                        value={form.values[field.name] || ""}
+                        error={form.errors[field.name]}
+                        confidence={
+                          field.confidenceKey ? confidence[field.confidenceKey] : undefined
+                        }
+                        onChange={handleFormChange}
+                      />
                     </FormRow>
                   ))}
                 </FormGrid>
@@ -763,13 +651,11 @@ export const ReviewPage = () => {
             </p>
             <FormActions
               onReset={() => {
-                stopVerifyPolling();
                 sessionStorage.removeItem("latestScanResult");
                 navigate({ to: "/scan" });
               }}
               onSave={saveLead}
               saving={isSaving}
-              saveDisabled={saveBlockedByVerify}
               saveHint={saveHint}
             />
           </Card>
@@ -792,27 +678,6 @@ export const ReviewPage = () => {
         onResolve={executeSave}
       />
 
-      <WhatsAppChatQrModal
-        open={verifyQrOpen}
-        registration={verifyRegistration}
-        contactName={resolvedFullName}
-        mode="verify"
-        verified={phoneVerified}
-        onClose={() => {
-          setVerifyQrOpen(false);
-          if (phoneVerified) {
-            setVerifyRegistration(null);
-          }
-          if (!phoneVerified) {
-            setPhoneVerifying(false);
-            stopVerifyPolling();
-          }
-        }}
-        onCopyLink={(url) => {
-          if (url) success("WhatsApp link copied.");
-          else error("Could not copy link.");
-        }}
-      />
     </PageContainer>
   );
 };

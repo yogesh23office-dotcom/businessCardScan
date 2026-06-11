@@ -121,21 +121,13 @@ async function saveOnlineDirectToZoho(
 ): Promise<{ id: string; queued?: boolean } & ZohoSaveFields> {
   const email = pickPrimaryEmail(payload);
   const body = { ...payload, email };
-
-  if (!options?.skipEmail && !email) {
-    return {
-      id: crypto.randomUUID(),
-      zohoError: "Email is required for thank-you email. Fill the Email field on Review.",
-      emailError: "No email address on this contact.",
-      emailExtracted: null,
-    };
-  }
+  const skipEmail = Boolean(options?.skipEmail) || !email;
 
   try {
     const zoho = await syncPayloadToZoho(body, {
       connectionMode: "online",
       skipWhatsApp: options?.skipWhatsApp,
-      skipEmail: options?.skipEmail,
+      skipEmail,
     });
     const { recordDirectZohoCapture } = await import("@/lib/captureSourceAnalytics");
     recordDirectZohoCapture();
