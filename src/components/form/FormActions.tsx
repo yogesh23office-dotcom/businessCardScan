@@ -18,12 +18,12 @@ export const FormActions = ({
       <p className="text-xs text-amber-700 dark:text-amber-300">{saveHint}</p>
     ) : null}
     <div className="flex flex-wrap gap-3">
-      <Button variantType="secondary" className="min-w-[7rem] flex-1 sm:flex-none" onClick={onReset}>
+      <Button variantType="secondary" className="min-w-[7rem] flex-1 rounded-sm sm:flex-none" onClick={onReset}>
         Discard
       </Button>
       <Button
         variantType="primary"
-        className="min-w-[7rem] flex-1 sm:flex-none"
+        className="min-w-[7rem] flex-1 rounded-sm sm:flex-none"
         onClick={onSave}
         disabled={saving || saveDisabled}
       >

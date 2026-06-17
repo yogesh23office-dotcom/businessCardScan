@@ -32,7 +32,7 @@ export const FieldRenderer = ({
     <div
       className={cn(
         "space-y-1.5",
-        isLow && "rounded-xl border border-amber-500/40 bg-amber-500/5 p-2",
+        isLow && "rounded-sm border border-amber-500/40 bg-amber-500/5 p-2",
       )}
     >
       <div className="flex items-center justify-between gap-2">

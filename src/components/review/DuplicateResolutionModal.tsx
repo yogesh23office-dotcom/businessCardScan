@@ -33,7 +33,7 @@ export function DuplicateResolutionModal({
       description={`A contact matching this card already exists (${match.matchedBy.join(", ")}).`}
     >
       <div className="space-y-4">
-        <div className="rounded-xl border border-border/60 bg-muted/20 p-3 text-sm">
+        <div className="rounded-sm border border-border/60 bg-muted/20 p-3 text-sm">
           <div className="font-medium">{name}</div>
           <div className="text-xs text-muted-foreground">{existing.company}</div>
         </div>
@@ -42,7 +42,7 @@ export function DuplicateResolutionModal({
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">Differences</p>
             {diffs.map((d) => (
-              <div key={d.field} className="rounded-lg border border-border/40 p-2 text-xs">
+              <div key={d.field} className="rounded-sm border border-border/40 p-2 text-xs">
                 <div className="font-medium">{d.field}</div>
                 <div className="mt-1 grid grid-cols-2 gap-2">
                   <div>
@@ -62,14 +62,14 @@ export function DuplicateResolutionModal({
         )}
 
         <div className="grid grid-cols-2 gap-2 pt-2">
-          <Button variantType="secondary" onClick={() => onResolve("update")}>
+          <Button variantType="secondary" className="rounded-sm" onClick={() => onResolve("update")}>
             Update existing
           </Button>
-          <Button variantType="secondary" onClick={() => onResolve("merge")}>
+          <Button variantType="secondary" className="rounded-sm" onClick={() => onResolve("merge")}>
             Merge contact
           </Button>
-          <Button onClick={() => onResolve("new")}>Save as new</Button>
-          <Button variantType="secondary" onClick={() => onResolve("discard")}>
+          <Button className="rounded-sm" onClick={() => onResolve("new")}>Save as new</Button>
+          <Button variantType="secondary" className="rounded-sm" onClick={() => onResolve("discard")}>
             Discard
           </Button>
         </div>

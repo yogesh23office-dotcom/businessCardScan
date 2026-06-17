@@ -104,7 +104,7 @@ export function ExtractedValuePicker({ label, items, onChange }: ExtractedValueP
           <div
             key={`${item.value}-${index}`}
             className={cn(
-              "rounded-xl border px-3 py-2.5 transition-colors",
+              "rounded-sm border px-3 py-2.5 transition-colors",
               !item.included ? "border-border/40 bg-muted/10 opacity-50" : "border-border/60 bg-muted/20",
             )}
           >
@@ -124,7 +124,7 @@ export function ExtractedValuePicker({ label, items, onChange }: ExtractedValueP
                   type="button"
                   onClick={() => onChange(setPrimary(items, index))}
                   className={cn(
-                    "rounded-lg px-2 py-1 text-[11px] font-medium",
+                    "rounded-sm px-2 py-1 text-[11px] font-medium",
                     item.role === "primary"
                       ? "bg-primary text-primary-foreground"
                       : "bg-background/60 text-muted-foreground hover:bg-background",
@@ -136,7 +136,7 @@ export function ExtractedValuePicker({ label, items, onChange }: ExtractedValueP
                   type="button"
                   onClick={() => onChange(setSecondary(items, index))}
                   className={cn(
-                    "rounded-lg px-2 py-1 text-[11px] font-medium",
+                    "rounded-sm px-2 py-1 text-[11px] font-medium",
                     item.role === "secondary"
                       ? "bg-violet-500 text-white"
                       : "bg-background/60 text-muted-foreground hover:bg-background",
@@ -147,7 +147,7 @@ export function ExtractedValuePicker({ label, items, onChange }: ExtractedValueP
                 <button
                   type="button"
                   onClick={() => onChange(discardItem(items, index))}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-destructive/50 bg-destructive/5 text-destructive transition hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-sm border border-destructive/50 bg-destructive/5 text-destructive transition hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={!item.included}
                   aria-label="Discard value"
                 >

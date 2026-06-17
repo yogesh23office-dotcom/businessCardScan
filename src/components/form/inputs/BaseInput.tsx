@@ -8,7 +8,7 @@ export const BaseInput = ({ as = "input", value, placeholder, type = "text", onC
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        className="min-h-24 resize-none rounded-xl border-border/60 bg-background"
+        className="min-h-24 resize-none rounded-sm border-border/60 bg-background"
       />
     );
   }
@@ -18,7 +18,7 @@ export const BaseInput = ({ as = "input", value, placeholder, type = "text", onC
       placeholder={placeholder}
       type={type}
       onChange={(e) => onChange(e.target.value)}
-      className="h-11 rounded-xl border-border/60 bg-background"
+      className="h-11 rounded-sm border-border/60 bg-background"
     />
   );
 };

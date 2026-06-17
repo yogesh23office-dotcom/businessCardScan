@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { Mic, Square } from "lucide-react";
 import { leadFields } from "@/constants/formFields";
 import { useUpload } from "@/hooks/useUpload";
 import { useForm } from "@/hooks/useForm";
@@ -49,6 +50,8 @@ import { scanFileAndStore } from "@/lib/scanPipeline";
 import { loadScanSession, readFileAsDataUrl, dataUrlToFile, isEmptyScanContact } from "@/lib/scanSession";
 import { EventNameCombobox } from "@/components/review/EventNameCombobox";
 import { getLastUsedEventName, loadEvents, resolveEventForSave } from "@/lib/eventStorage";
+import { useSpeechToText } from "@/hooks/useSpeechToText";
+import { cn } from "@/lib/utils";
 
 const sectionMap = {
   basic: "Basic Information",
@@ -101,7 +104,18 @@ export const ReviewPage = () => {
   const [eventName, setEventName] = useState(() => getLastUsedEventName() || "");
   const [eventError, setEventError] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
+  const notesRef = useRef("");
   const { success, error, info } = useToast();
+  const speech = useSpeechToText({
+    onUnsupported: () => info("Speech-to-text is not supported in this browser. Use Chrome or Edge."),
+    onError: (message) => {
+      if (message === "not-allowed") {
+        error("Microphone permission denied. Allow mic access to dictate notes.");
+      } else {
+        info("Could not capture speech. Try again or type your notes.");
+      }
+    },
+  });
   const upload = useUpload();
   const form = useForm(leadFields, initialValues);
 
@@ -125,7 +139,10 @@ export const ReviewPage = () => {
     });
   };
 
+  const { stopListening } = speech;
+
   const applyScanData = useCallback((raw: ReturnType<typeof parseScanContact>) => {
+    stopListening();
     const nextPickers: PickerState = {
       phones: createPickerItems(raw.phones),
       emails: createPickerItems(raw.emails),
@@ -153,8 +170,7 @@ export const ReviewPage = () => {
       socialLinks: raw.socialLinks,
       gstNumber: raw.gstNumber,
     });
-    setNotes("");
-  }, [form.setMany]);
+  }, [form.setMany, stopListening]);
 
   const loadFromSession = useCallback(() => {
     const { contact, imageDataUrl, meta } = loadScanSession();
@@ -175,6 +191,19 @@ export const ReviewPage = () => {
 
   const settings = loadUserSettings();
   const primaryPhone = form.values.phoneNumber.trim();
+
+  useEffect(() => {
+    notesRef.current = notes;
+  }, [notes]);
+
+  const handleNotesChange = (value: string) => {
+    if (speech.listening) speech.stopListening();
+    setNotes(value.slice(0, speech.maxLength));
+  };
+
+  const handleNotesDictation = () => {
+    speech.toggleListening(notesRef.current, (value) => setNotes(value));
+  };
   const whatsappTemplateOnSave =
     settings.whatsappNotificationsEnabled &&
     typeof navigator !== "undefined" &&
@@ -491,16 +520,16 @@ export const ReviewPage = () => {
     }
 
     const savedEvent = resolveEventForSave(trimmedEvent);
-    setEventName(savedEvent.name);
-    eventNameRef.current = savedEvent.name;
+    setEventName(savedEvent.eventName);
+    eventNameRef.current = savedEvent.eventName;
 
-    const payload = buildPayload(savedEvent.name);
+    const payload = buildPayload(savedEvent.eventName);
     const mode = getConnectionMode();
 
     console.info("[Review save]", {
       eventNameInput: eventInputRef.current?.value,
       eventNameState: eventName,
-      eventNameResolved: savedEvent.name,
+      eventNameResolved: savedEvent.eventName,
       connectionMode: mode,
       navigatorOnLine: typeof navigator !== "undefined" ? navigator.onLine : null,
       payloadEventName: payload.eventName,
@@ -560,7 +589,7 @@ export const ReviewPage = () => {
       <AppLayout
         left={
           <>
-            <Card>
+            <Card className="rounded-sm">
               {upload.previewUrl || savedScanImage ? (
                 <ImagePreview
                   src={upload.previewUrl || savedScanImage}
@@ -596,15 +625,15 @@ export const ReviewPage = () => {
                 />
               )}
               <div className="mt-4 flex gap-2">
-                <Button variantType="secondary" className="h-11 flex-1 rounded-xl" onClick={() => setCameraOpen(true)}>
+                <Button variantType="secondary" className="h-11 flex-1 rounded-sm" onClick={() => setCameraOpen(true)}>
                   Use camera
                 </Button>
-                <Button variantType="secondary" className="h-11 flex-1 rounded-xl" onClick={() => navigate({ to: "/scan" })}>
+                <Button variantType="secondary" className="h-11 flex-1 rounded-sm" onClick={() => navigate({ to: "/scan" })}>
                   Retake scan
                 </Button>
               </div>
             </Card>
-            <Card>
+            <Card className="rounded-sm">
               <EventNameCombobox
                 ref={eventInputRef}
                 value={eventName ?? ""}
@@ -630,25 +659,62 @@ export const ReviewPage = () => {
                   <Label htmlFor="contact-notes" className="text-sm font-medium text-foreground">
                     Notes
                   </Label>
-                  <Textarea
-                    id="contact-notes"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Add notes about this contact..."
-                    maxLength={2000}
-                    className="min-h-28 resize-none rounded-xl border-border/60 bg-background"
-                  />
-      <p className="text-xs text-muted-foreground">
-        Saved to Zoho Features column as Notes (stored below the event name on the lead).
-      </p>
-                  <p className="text-right text-xs text-muted-foreground">{notes.length}/2000 characters</p>
+                  <div className="relative">
+                    <Textarea
+                      id="contact-notes"
+                      value={notes}
+                      onChange={(e) => handleNotesChange(e.target.value)}
+                      placeholder="Type your notes here..."
+                      maxLength={2000}
+                      className={cn(
+                        "min-h-32 resize-none rounded-sm border-border/60 bg-background pb-12 pl-3.5 pr-14 pt-3.5 text-sm leading-relaxed shadow-sm transition-[border-color,box-shadow]",
+                        speech.listening && "border-red-300/80 ring-2 ring-red-200/60 dark:border-red-900/60 dark:ring-red-950/40",
+                      )}
+                    />
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 rounded-b-sm bg-gradient-to-t from-background via-background/95 to-transparent px-3.5 pb-2.5 pt-6">
+                      <span className="text-[11px] tabular-nums text-muted-foreground">
+                        {speech.listening ? (
+                          <span className="inline-flex items-center gap-1.5 font-medium text-red-600 dark:text-red-400">
+                            <span className="h-1.5 w-1.5 animate-pulse rounded-sm bg-red-500" />
+                            Listening…
+                          </span>
+                        ) : (
+                          <>{notes.length}/2000</>
+                        )}
+                      </span>
+                      {speech.supported ? (
+                        <button
+                          type="button"
+                          onClick={handleNotesDictation}
+                          aria-pressed={speech.listening}
+                          aria-label={speech.listening ? "Stop dictating notes" : "Dictate notes"}
+                          className={cn(
+                            "pointer-events-auto inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border shadow-sm transition-all",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                            speech.listening
+                              ? "border-red-200 bg-red-500 text-white hover:bg-red-600 dark:border-red-800 dark:bg-red-600 dark:hover:bg-red-500"
+                              : "border-border/70 bg-muted/80 text-muted-foreground hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700 dark:hover:border-slate-600 dark:hover:bg-slate-800 dark:hover:text-sky-300",
+                          )}
+                        >
+                          {speech.listening ? (
+                            <Square className="h-3.5 w-3.5 fill-current" />
+                          ) : (
+                            <Mic className="h-4 w-4" />
+                          )}
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Notes are not filled from the card scan. Tap the mic to dictate; saved to Zoho Features below the event name.
+                  </p>
                 </div>
               </div>
             </Card>
           </>
         }
         right={
-          <Card className="h-full">
+          <Card className="h-full rounded-sm">
             {hasMultiValues && (
               <FormSection title="Select primary & secondary values" className="mb-5">
                 <p className="mb-4 text-xs text-muted-foreground">
@@ -675,14 +741,14 @@ export const ReviewPage = () => {
             )}
 
             <FormSection title="Review fields" className="mb-5">
-              <div className="flex flex-col gap-3 rounded-2xl border border-sky-200/70 bg-sky-50/80 p-4 text-sm dark:border-slate-700 dark:bg-slate-900/50">
+              <div className="flex flex-col gap-3 rounded-sm border border-sky-200/70 bg-sky-50/80 p-4 text-sm dark:border-slate-700 dark:bg-slate-900/50">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="font-semibold text-slate-700 dark:text-slate-200">Show optional fields</p>
                   <Button
                     type="button"
                     variantType={showAdvancedFields ? "secondary" : "primary"}
                     onClick={() => setShowAdvancedFields((prev) => !prev)}
-                    className="h-10 rounded-xl px-5"
+                    className="h-10 rounded-sm px-5"
                   >
                     {showAdvancedFields ? "Collapse optional fields" : "Show optional fields"}
                   </Button>
@@ -693,7 +759,7 @@ export const ReviewPage = () => {
               </div>
             </FormSection>
             {(ocrWarning || !hasDetectedName) && (
-              <div className="mb-5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
+              <div className="mb-5 rounded-sm border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
                 {ocrWarning ? (
                   <>
                     <p className="font-medium">OCR could not read this card</p>
@@ -714,7 +780,7 @@ export const ReviewPage = () => {
               <FormSection
                 key={section}
                 title={sectionMap[section]}
-                className={index === 0 ? "" : "border-t border-border/60 pt-5"}
+                className={cn("pb-5", index > 0 && "border-t border-border/60 pt-5")}
               >
                 <FormGrid>
                   {groupedFields[section].map((field) => (
