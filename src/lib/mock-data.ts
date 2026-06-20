@@ -24,7 +24,7 @@ const accents = [
 ];
 
 const seed: Omit<Contact, "id" | "initials" | "accent">[] = [
-  { name: "Amelia Chen", company: "Northwind Labs", title: "VP Product", email: "amelia@northwind.io", phone: "+1 415 555 0142", status: "synced", channels: { whatsapp: true, email: true }, lastSync: "2m ago" },
+  { name: "Yogesh VR", company: "CardScan", title: "Workspace owner", email: "yogeshvanaparthi@gmail.com", phone: "+91 98849 93074", status: "synced", channels: { whatsapp: true, email: true }, lastSync: "2m ago" },
   { name: "Marcus Holloway", company: "Lattice Group", title: "Head of Growth", email: "marcus@lattice.co", phone: "+44 20 7946 0958", status: "pending", channels: { whatsapp: true, email: false }, lastSync: "Queued" },
   { name: "Priya Raman", company: "Helix Robotics", title: "Director of Engineering", email: "priya@helixrobotics.com", phone: "+91 98765 43210", status: "synced", channels: { whatsapp: false, email: true }, lastSync: "11m ago" },
   { name: "Sofia Marquez", company: "Atlas & Co.", title: "Founder", email: "sofia@atlasand.co", phone: "+34 91 123 4567", status: "failed", channels: { whatsapp: true, email: true }, lastSync: "Failed" },
@@ -52,7 +52,7 @@ export const kpis = [
 
 export const queueActivity = [
   { id: 1, label: "Synced 12 contacts to CRM", time: "Just now", tone: "success" as const },
-  { id: 2, label: "WhatsApp message sent to Amelia Chen", time: "2m ago", tone: "primary" as const },
+  { id: 2, label: "WhatsApp message sent to Yogesh VR", time: "2m ago", tone: "primary" as const },
   { id: 3, label: "Queued 3 cards while offline", time: "14m ago", tone: "warning" as const },
   { id: 4, label: "OCR processed batch #248", time: "21m ago", tone: "muted" as const },
   { id: 5, label: "Retry succeeded for Sofia Marquez", time: "38m ago", tone: "success" as const },

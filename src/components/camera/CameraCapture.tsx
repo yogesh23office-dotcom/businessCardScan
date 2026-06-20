@@ -13,6 +13,7 @@ import {
   getCenteredCardCropRegion,
   measureCardPresence,
   measureFrameSharpness,
+  isMobileDevice,
   pickDefaultFacingMode,
   type AlignmentStatus,
 } from "@/lib/cardFrameAnalysis";
@@ -47,11 +48,18 @@ const STATUS_COPY: Record<AlignmentStatus, { title: string; hint: string }> = {
 
 type ConstraintTier = 0 | 1 | 2;
 
+function initialConstraintTier(): ConstraintTier {
+  // Mobile: prefer rear camera; desktop: unconstrained for single webcam
+  return isMobileDevice() ? 1 : 0;
+}
+
 function buildVideoConstraints(
   facingMode: "environment" | "user",
   tier: ConstraintTier,
 ): MediaTrackConstraints | boolean {
-  if (tier === 0) return true;
+  if (tier === 0) {
+    return isMobileDevice() ? { facingMode } : true;
+  }
   if (tier === 1) return { facingMode: { ideal: facingMode } };
   return { facingMode };
 }
@@ -98,7 +106,7 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
   const [error, setError] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<"environment" | "user">(pickDefaultFacingMode());
   const [cameraKey, setCameraKey] = useState(0);
-  const [constraintTier, setConstraintTier] = useState<ConstraintTier>(0);
+  const [constraintTier, setConstraintTier] = useState<ConstraintTier>(initialConstraintTier);
   const [sharpness, setSharpness] = useState(0);
   const [cardScore, setCardScore] = useState(0);
   const [stableCount, setStableCount] = useState(0);
@@ -240,7 +248,7 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
     stopAnalysis();
     resetLiveMetrics();
     setError(null);
-    setConstraintTier(0);
+    setConstraintTier(initialConstraintTier());
     setIsStarting(true);
     setCameraKey((key) => key + 1);
   }, [stopAnalysis, resetLiveMetrics]);
@@ -253,7 +261,7 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
       setPreviewUrl(null);
       setCapturedFile(null);
       setError(null);
-      setConstraintTier(0);
+      setConstraintTier(initialConstraintTier());
       resetLiveMetrics();
       return;
     }
@@ -265,7 +273,7 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
     }
 
     if (phaseRef.current === "live") {
-      setConstraintTier(0);
+      setConstraintTier(initialConstraintTier());
       setIsStarting(true);
     }
   }, [open, stopAnalysis, resetLiveMetrics]);

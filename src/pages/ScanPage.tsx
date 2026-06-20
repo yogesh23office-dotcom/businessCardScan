@@ -446,13 +446,8 @@ export function ScanPage() {
             ) : (
               <div className="absolute inset-6 flex flex-col justify-between text-white opacity-40">
                 <div>
-                  <div className="font-display text-base font-semibold">Amelia Chen</div>
-                  <div className="text-[11px] opacity-70">VP Product · Northwind Labs</div>
-                </div>
-                <div className="space-y-0.5 text-[10px] opacity-80">
-                  <div>amelia@northwind.io</div>
-                  <div>+1 415 555 0142</div>
-                  <div>northwind.io</div>
+                  <div className="font-display text-base font-semibold">Sample Contact</div>
+                  <div className="text-[11px] opacity-70">Job Title · Company</div>
                 </div>
               </div>
             )}

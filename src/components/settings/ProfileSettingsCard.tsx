@@ -134,7 +134,7 @@ export function ProfileSettingsCard({
                 value={profile.phone}
                 onChange={(e) => onChange("phone", e.target.value)}
                 className="h-10 rounded-md border-border/60 bg-background"
-                placeholder="+1 415 555 0142"
+                placeholder="+91 XXXXX XXXXX"
               />
             </Field>
           </div>

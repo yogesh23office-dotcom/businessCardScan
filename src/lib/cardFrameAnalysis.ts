@@ -230,7 +230,7 @@ export function getAlignmentProgress(
   return Math.round(sharpPct + cardPct + stablePct);
 }
 
-function isMobileDevice(): boolean {
+export function isMobileDevice(): boolean {
   if (typeof navigator === "undefined") return false;
   return /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent);
 }
@@ -261,21 +261,33 @@ export async function requestCameraStream(
   }
 
   const facing = preferredFacing ?? pickDefaultFacingMode();
+  const mobile = isMobileDevice();
   const attempts: MediaStreamConstraints[] = [];
 
-  // 1. Simplest first — works on most Windows laptops
-  attempts.push({ video: true, audio: false });
+  if (mobile) {
+    // Mobile: rear camera first — { video: true } often opens the selfie cam
+    attempts.push({ video: { facingMode: facing }, audio: false });
+    attempts.push({ video: { facingMode: { ideal: facing } }, audio: false });
+  } else {
+    // Desktop: unconstrained first — works on most Windows laptops
+    attempts.push({ video: true, audio: false });
+  }
 
-  // 2. Try each physical camera by deviceId (after permission, labels may be available)
+  // Try each physical camera by deviceId (after permission, labels may be available)
   const videoInputs = await enumerateVideoInputs();
   for (const device of videoInputs) {
     attempts.push({ video: { deviceId: { exact: device.deviceId } }, audio: false });
     attempts.push({ video: { deviceId: { ideal: device.deviceId } }, audio: false });
   }
 
-  // 3. Facing mode (mobile)
-  attempts.push({ video: { facingMode: { ideal: facing } }, audio: false });
-  attempts.push({ video: { facingMode: facing }, audio: false });
+  if (!mobile) {
+    attempts.push({ video: { facingMode: { ideal: facing } }, audio: false });
+    attempts.push({ video: { facingMode: facing }, audio: false });
+  }
+
+  if (mobile) {
+    attempts.push({ video: true, audio: false });
+  }
 
   let lastError: unknown;
   const seen = new Set<string>();

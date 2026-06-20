@@ -33,12 +33,8 @@ export function AuthScannerPanel() {
         <div className="relative aspect-[1.6/1] overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-slate-900 to-[#0f172a]">
           <div className="absolute inset-5 flex flex-col justify-between text-white/55">
             <div>
-              <div className="font-display text-sm font-semibold text-white/80">Amelia Chen</div>
-              <div className="text-[10px]">VP Product · Northwind Labs</div>
-            </div>
-            <div className="space-y-0.5 text-[10px]">
-              <div>amelia@northwind.io</div>
-              <div>+1 415 555 0142</div>
+              <div className="font-display text-sm font-semibold text-white/80">Sample Contact</div>
+              <div className="text-[10px]">Job Title · Company</div>
             </div>
           </div>
 
