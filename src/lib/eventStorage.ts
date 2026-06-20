@@ -94,7 +94,11 @@ export function resolveEventForSave(eventName: string): {
   eventName: string;
   eventId?: string;
 } {
-  const saved = rememberEvent(eventName);
+  const trimmed = eventName.trim();
+  if (!trimmed) {
+    return { eventName: "" };
+  }
+  const saved = rememberEvent(trimmed);
   return { eventName: saved.name, eventId: saved.id };
 }
 

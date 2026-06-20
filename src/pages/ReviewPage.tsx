@@ -502,12 +502,7 @@ export const ReviewPage = () => {
       return;
     }
 
-    const trimmedEvent = readEventName();
-    if (!trimmedEvent) {
-      setEventError("Select or enter an event name before saving.");
-      error("Please select or enter an event name before saving.");
-      return;
-    }
+    const trimmedEvent = readEventName().trim();
     setEventError(null);
 
     if (!form.validate({ fullName })) {

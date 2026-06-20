@@ -14,17 +14,29 @@ export async function getAuthBearerToken(forceRefresh = false): Promise<string |
   }
 
   try {
-    const result = await authClient.getSession({
+    // Neon recommends authClient.token() for external API Authorization headers.
+    const tokenResult = await authClient.token(
+      forceRefresh
+        ? { fetchOptions: { headers: { "X-Force-Fetch": "true" } } }
+        : undefined,
+    );
+    const jwt = tokenResult.data?.token;
+    if (jwt) {
+      cachedToken = jwt;
+      cachedExpiresAt = now + 14 * 60_000;
+      return jwt;
+    }
+
+    const sessionResult = await authClient.getSession({
       query: { disableRefresh: false },
     });
+    const sessionToken = sessionResult.data?.session?.token;
+    const expiresAt = sessionResult.data?.session?.expiresAt;
 
-    const token = result.data?.session?.token;
-    const expiresAt = result.data?.session?.expiresAt;
-
-    if (token) {
-      cachedToken = token;
+    if (sessionToken) {
+      cachedToken = sessionToken;
       cachedExpiresAt = expiresAt ? new Date(expiresAt).getTime() : now + 3_600_000;
-      return token;
+      return sessionToken;
     }
   } catch {
     /* session unavailable */
