@@ -1,11 +1,12 @@
-const CACHE_NAME = 'cardsync-cache-v3';
+const CACHE_NAME = 'cardsync-cache-v5';
 const ASSETS_TO_CACHE = [
   '/',
   '/scan',
   '/contacts',
   '/queue',
   '/settings',
-  '/favicon.ico',
+  '/favicon.png',
+  '/logo.png',
   '/tessdata/eng.traineddata',
 ];
 

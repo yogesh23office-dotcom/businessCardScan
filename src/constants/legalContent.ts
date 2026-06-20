@@ -6,7 +6,11 @@ export const LEGAL_PAGE_URLS = {
   terms: "/terms-and-conditions.html",
 } as const;
 
-export const LEGAL_CONTACT_EMAIL = "yogi2324@gmail.com";
+export const LEGAL_CONTACT_EMAIL = "yogeshvanaparthi@gmail.com";
+export const LEGAL_CONTACT_PHONE = "+91 98849 93074";
+export const LEGAL_CONTACT_PHONE_TEL = "+919884993074";
+
+export const LEGAL_CONTACT_LINE = `${LEGAL_CONTACT_EMAIL} · ${LEGAL_CONTACT_PHONE}`;
 
 export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
   {
@@ -29,7 +33,7 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
   },
   {
     heading: "Contact",
-    body: `Users may contact us regarding data-related requests at: ${LEGAL_CONTACT_EMAIL}`,
+    body: `Users may contact us regarding data-related requests at ${LEGAL_CONTACT_EMAIL} or ${LEGAL_CONTACT_PHONE}.`,
   },
 ];
 
@@ -61,7 +65,7 @@ export const TERMS_AND_CONDITIONS_SECTIONS: LegalSection[] = [
   },
   {
     heading: "Contact",
-    body: `Questions about these terms or data requests: ${LEGAL_CONTACT_EMAIL}`,
+    body: `Questions about these terms or data requests: ${LEGAL_CONTACT_EMAIL} or ${LEGAL_CONTACT_PHONE}.`,
   },
 ];
 

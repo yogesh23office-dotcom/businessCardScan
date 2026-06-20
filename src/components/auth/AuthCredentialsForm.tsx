@@ -3,15 +3,15 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Eye, EyeOff, Loader2, Sparkles } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { authClient } from "@/auth";
+import { AppLogo } from "@/components/brand/AppLogo";
 import { AuthField } from "@/components/auth/AuthField";
 import { resolvePostAuthPath } from "@/components/auth/AuthGate";
 import { clearAuthTokenCache } from "@/lib/authSession";
 import { neonAuthConfigIssue, neonAuthUrl } from "@/lib/authConfig";
-import { PRODUCT_TAGLINE } from "@/constants/navigation";
 import { cn } from "@/lib/utils";
 
 type AuthMode = "sign-in" | "sign-up";
@@ -155,14 +155,12 @@ export function AuthCredentialsForm({ mode }: { mode: AuthMode }) {
   return (
     <div className="mx-auto w-full min-w-0 max-w-lg rounded-2xl bg-white px-6 py-8 shadow-sm sm:px-8 sm:py-10">
       <div className="mb-6 flex items-center gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-glow">
-          <Sparkles className="h-4 w-4" />
-        </div>
+        <AppLogo size="md" />
         <div className="leading-tight">
           <div className="font-display text-lg font-semibold tracking-tight text-[#1e3a5f]">
-            CardSync AI
+            CardScan
           </div>
-          <div className="text-[11px] text-muted-foreground">{PRODUCT_TAGLINE}</div>
+          <div className="text-[11px] text-muted-foreground">Scan · Detect · Extract</div>
         </div>
       </div>
 

@@ -109,7 +109,7 @@ export function ProfileSettingsCard({
                 value={profile.fullName}
                 onChange={(e) => onChange("fullName", e.target.value)}
                 className="h-10 rounded-md border-border/60 bg-background"
-                placeholder="Yogesh Vanaparti"
+                placeholder="Yogesh VR"
               />
             </Field>
             <Field id="profile-email" label="Email" icon={<Mail className="h-3.5 w-3.5" />}>

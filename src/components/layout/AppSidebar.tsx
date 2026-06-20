@@ -1,7 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Sparkles } from "lucide-react";
+import { AppLogo } from "@/components/brand/AppLogo";
 import { sidebarItems } from "@/constants/sidebarItems";
-import { NAV_SECTION_LABEL, PRODUCT_TAGLINE } from "@/constants/navigation";
+import { NAV_SECTION_LABEL } from "@/constants/navigation";
 
 import {
   Sidebar,
@@ -36,13 +36,11 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r border-border/60">
       <SidebarHeader className="px-3 pt-4">
         <Link to="/scan" className="flex items-center gap-2.5 px-2 py-1.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-primary shadow-glow">
-            <Sparkles className="h-4 w-4 text-primary-foreground" />
-          </div>
+          <AppLogo size={collapsed ? "sm" : "md"} />
           {!collapsed && (
             <div className="leading-tight">
-              <div className="font-display text-[15px] font-semibold tracking-tight">CardSync AI</div>
-              <div className="text-[11px] text-muted-foreground">{PRODUCT_TAGLINE}</div>
+              <div className="font-display text-[15px] font-semibold tracking-tight">CardScan</div>
+              <div className="text-[11px] text-muted-foreground">Scan · Detect · Extract</div>
             </div>
           )}
         </Link>

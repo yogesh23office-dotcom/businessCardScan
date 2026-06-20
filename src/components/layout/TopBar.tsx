@@ -36,15 +36,16 @@ export function TopBar() {
   const navigate = useNavigate();
 
   const displayName =
+    profileName ||
     authSession?.user?.name?.trim() ||
     authSession?.user?.email?.trim() ||
-    profileName ||
-    "User";
+    "Yogesh VR";
 
   const avatarInitials =
+    profileInitials ||
     authSession?.user?.name?.trim()?.slice(0, 2).toUpperCase() ||
     authSession?.user?.email?.trim()?.slice(0, 2).toUpperCase() ||
-    profileInitials;
+    "YV";
 
   const handleSignOut = async () => {
     clearAuthTokenCache();

@@ -44,7 +44,7 @@ export const TIMEZONE_OPTIONS = [
 export const DEFAULT_USER_SETTINGS: UserSettings = {
   fullName: "Yogesh VR",
   email: "yogeshvanaparthi@gmail.com",
-  phone: "9884993074",
+  phone: "+91 98849 93074",
   company: "CardSync AI",
   role: "Workspace owner",
   timezone: "India Standard Time",
@@ -71,6 +71,15 @@ export function loadUserSettings(): UserSettings {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_USER_SETTINGS };
     const parsed = JSON.parse(raw) as Partial<UserSettings>;
+    if (
+      parsed.fullName?.trim() === "Alex Kim" ||
+      parsed.email?.trim().toLowerCase() === "alex@cardsync.ai" ||
+      parsed.email?.trim().toLowerCase() === "yogi2324@gmail.com"
+    ) {
+      parsed.fullName = DEFAULT_USER_SETTINGS.fullName;
+      parsed.email = DEFAULT_USER_SETTINGS.email;
+      parsed.phone = DEFAULT_USER_SETTINGS.phone;
+    }
     const autoSyncToZohoWhenOnline =
       parsed.autoSyncToZohoWhenOnline ??
       parsed.autoSyncQueueWhenOnline ??

@@ -4,7 +4,7 @@ import { AuthCredentialsForm } from "@/components/auth/AuthCredentialsForm";
 import { ForgotPasswordForm } from "@/components/auth/ForgotPasswordForm";
 import { AuthScannerPanel } from "@/components/auth/AuthScannerPanel";
 import { NeuralVortexBackground } from "@/components/ui/interactive-neural-vortex-background";
-import { LEGAL_CONTACT_EMAIL, LEGAL_PAGE_URLS } from "@/constants/legalContent";
+import { LEGAL_CONTACT_EMAIL, LEGAL_CONTACT_PHONE, LEGAL_CONTACT_PHONE_TEL, LEGAL_PAGE_URLS } from "@/constants/legalContent";
 import { neonAuthConfigIssue } from "@/lib/authConfig";
 import { checkNeonAuthHealth } from "@/lib/authHealth";
 import { useForceLightMode } from "@/hooks/useForceLightMode";
@@ -48,12 +48,21 @@ export function AuthPage({ pathname }: { pathname: string }) {
         <div className="pointer-events-none absolute bottom-0 left-0 h-56 w-56 max-w-[50%] rounded-full bg-cyan-300/10 blur-3xl" />
 
         <header className="relative z-10 flex shrink-0 justify-end px-5 py-4 sm:px-10 lg:px-14">
-          <a
-            href={`mailto:${LEGAL_CONTACT_EMAIL}`}
-            className="text-sm font-medium text-primary transition-colors hover:text-primary/80"
-          >
-            Need help?
-          </a>
+          <div className="text-right text-sm leading-relaxed">
+            <p className="font-medium text-[#1e3a5f]">Need help?</p>
+            <a
+              href={`mailto:${LEGAL_CONTACT_EMAIL}`}
+              className="block font-medium text-primary transition-colors hover:text-primary/80"
+            >
+              {LEGAL_CONTACT_EMAIL}
+            </a>
+            <a
+              href={`tel:${LEGAL_CONTACT_PHONE_TEL}`}
+              className="block text-muted-foreground transition-colors hover:text-primary"
+            >
+              {LEGAL_CONTACT_PHONE}
+            </a>
+          </div>
         </header>
 
         <div className="relative z-10 flex flex-1 items-center justify-center overflow-y-auto px-5 py-10 sm:px-10 lg:px-14 lg:py-14">

@@ -6,7 +6,7 @@ if (!authUrl) {
   process.exit(1);
 }
 
-const email = process.env.AUTH_SEED_EMAIL ?? "yogi2324@gmail.com";
+const email = process.env.AUTH_SEED_EMAIL ?? "yogeshvanaparthi@gmail.com";
 const password = process.env.AUTH_SEED_PASSWORD ?? "CardSyncDemo2026!";
 const name = process.env.AUTH_SEED_NAME ?? "CardSync Admin";
 
