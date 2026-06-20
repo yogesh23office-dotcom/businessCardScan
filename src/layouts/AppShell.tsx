@@ -2,10 +2,10 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Outlet, useRouteContext, useRouter, useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { toast } from "sonner";
-import { AuthLoading, RedirectToSignIn, SignedIn } from "@neondatabase/auth-ui";
+
+import { AuthGate } from "@/components/auth/AuthGate";
 import { syncConnectionModeWithNetwork } from "@/lib/connectionMode";
 import { isAuthEnabled } from "@/lib/authConfig";
-
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { TopBar } from "@/components/layout/TopBar";
@@ -139,15 +139,7 @@ export function AppShell() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {authRequired ? (
-        <>
-          <AuthLoading />
-          <SignedIn>{appContent}</SignedIn>
-          <RedirectToSignIn />
-        </>
-      ) : (
-        appContent
-      )}
+      {authRequired ? <AuthGate>{appContent}</AuthGate> : appContent}
     </QueryClientProvider>
   );
 }

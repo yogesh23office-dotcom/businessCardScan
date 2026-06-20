@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 import { authClient } from "@/auth";
 import { AuthField } from "@/components/auth/AuthField";
+import { resolvePostAuthPath } from "@/components/auth/AuthGate";
 import { clearAuthTokenCache } from "@/lib/authSession";
 import { neonAuthConfigIssue, neonAuthUrl } from "@/lib/authConfig";
 import { PRODUCT_TAGLINE } from "@/constants/navigation";
@@ -95,7 +96,7 @@ export function AuthCredentialsForm({ mode }: { mode: AuthMode }) {
 
   useEffect(() => {
     if (!isPending && session?.user) {
-      navigate({ to: "/scan", replace: true });
+      navigate({ to: resolvePostAuthPath(), replace: true });
     }
   }, [isPending, session?.user, navigate]);
 
@@ -116,7 +117,7 @@ export function AuthCredentialsForm({ mode }: { mode: AuthMode }) {
 
       clearAuthTokenCache();
       toast.success("Welcome back!");
-      navigate({ to: "/scan", replace: true });
+      await authClient.getSession();
     } catch (error) {
       toast.error(extractErrorMessage(error));
     } finally {
@@ -141,7 +142,7 @@ export function AuthCredentialsForm({ mode }: { mode: AuthMode }) {
 
       clearAuthTokenCache();
       toast.success("Account created! You're signed in.");
-      navigate({ to: "/scan", replace: true });
+      await authClient.getSession();
     } catch (error) {
       toast.error(extractErrorMessage(error));
     } finally {
