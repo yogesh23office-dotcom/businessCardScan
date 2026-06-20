@@ -80,6 +80,14 @@ export async function dataUrlToFile(dataUrl: string, fileName = "scan.jpg"): Pro
   return new File([blob], fileName, { type });
 }
 
+function isGarbageExtractedValue(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  if (/^\|[\s@|]/.test(trimmed) || /@\s*remo/i.test(trimmed)) return true;
+  if (trimmed.length <= 6 && !/\s/.test(trimmed) && /[a-z][A-Z]/.test(trimmed)) return true;
+  return false;
+}
+
 export function isEmptyScanContact(contact: ScanContact | null): boolean {
   if (!contact) return true;
   return ![
@@ -89,5 +97,8 @@ export function isEmptyScanContact(contact: ScanContact | null): boolean {
     contact.phone,
     contact.email,
     contact.company,
-  ].some((v) => String(v || "").trim());
+  ].some((v) => {
+    const text = String(v || "").trim();
+    return text.length > 0 && !isGarbageExtractedValue(text);
+  });
 }

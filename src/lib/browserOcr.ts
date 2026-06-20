@@ -1,10 +1,13 @@
-import { createWorker, type Worker } from "tesseract.js";
+import { createWorker, PSM, type Worker } from "tesseract.js";
 import type { ScanContact } from "./scanResult";
 import { parseOcrText } from "./scanParser";
 import { preprocessForOCR } from "./cardFrameAnalysis";
 
 import workerPath from "tesseract.js/dist/worker.min.js?url";
 import corePath from "tesseract.js-core/tesseract-core.wasm.js?url";
+
+/** Minimum width for Tesseract — mobile card crops are often too small without upscaling. */
+const OCR_MIN_WIDTH = 1600;
 
 /** Directory URL for eng.traineddata (public/tessdata, copied to dist on build). */
 function getLangPath(): string {
@@ -27,7 +30,7 @@ function resolveBundledAsset(importedUrl: string): string {
 }
 
 async function createTesseractWorker(): Promise<Worker> {
-  return createWorker("eng", 1, {
+  const worker = await createWorker("eng", 1, {
     workerPath: resolveBundledAsset(workerPath),
     corePath: resolveBundledAsset(corePath),
     langPath: getLangPath(),
@@ -35,6 +38,11 @@ async function createTesseractWorker(): Promise<Worker> {
     cacheMethod: "refresh",
     logger: () => undefined,
   });
+  await worker.setParameters({
+    tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
+    preserve_interword_spaces: "1",
+  });
+  return worker;
 }
 
 /** Grayscale + contrast boost for Tesseract only — keeps stored/preview images in color. */
@@ -42,15 +50,18 @@ async function fileForOcr(file: File): Promise<File | Blob> {
   if (typeof document === "undefined") return file;
 
   const bitmap = await createImageBitmap(file);
+  const scale = Math.min(3, Math.max(1, OCR_MIN_WIDTH / bitmap.width));
   const canvas = document.createElement("canvas");
-  canvas.width = bitmap.width;
-  canvas.height = bitmap.height;
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
   const ctx = canvas.getContext("2d");
   if (!ctx) {
     bitmap.close();
     return file;
   }
-  ctx.drawImage(bitmap, 0, 0);
+  ctx.imageSmoothingEnabled = scale > 1;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   bitmap.close();
   preprocessForOCR(canvas);
 
