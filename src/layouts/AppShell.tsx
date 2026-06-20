@@ -1,21 +1,28 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Outlet, useRouteContext, useRouter } from "@tanstack/react-router";
+import { Outlet, useRouteContext, useRouter, useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { toast } from "sonner";
+import { AuthLoading, RedirectToSignIn, SignedIn } from "@neondatabase/auth-ui";
 import { syncConnectionModeWithNetwork } from "@/lib/connectionMode";
+import { isAuthEnabled } from "@/lib/authConfig";
 
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { NetworkOfflineBanner } from "@/components/layout/NetworkOfflineBanner";
-import { Toaster } from "@/components/ui/sonner";
 import { ConfirmModalProvider } from "@/components/ui/confirm-modal";
 import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
 import { countPendingZohoSync, maybeAutoSyncToZohoWhenOnline } from "@/lib/autoZohoSync";
 import { loadUserSettings } from "@/lib/settingsStorage";
+import { useForceLightMode } from "@/hooks/useForceLightMode";
 export function AppShell() {
   const { queryClient } = useRouteContext({ from: "__root__" });
   const router = useRouter();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const isAuthRoute = pathname.startsWith("/auth");
+  const authRequired = isAuthEnabled;
+
+  useForceLightMode(isAuthRoute);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -101,9 +108,16 @@ export function AppShell() {
     };
   }, [router]);
 
-  return (
-    <QueryClientProvider client={queryClient}>
-      <ConfirmModalProvider>
+  if (isAuthRoute) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <Outlet />
+      </QueryClientProvider>
+    );
+  }
+
+  const appContent = (
+    <ConfirmModalProvider>
       <SidebarProvider>
         <div className="flex min-h-screen w-full bg-background">
           <AppSidebar />
@@ -118,10 +132,22 @@ export function AppShell() {
             </main>
           </SidebarInset>
         </div>
-        <Toaster position="top-right" />
         <CookieConsentBanner />
       </SidebarProvider>
-      </ConfirmModalProvider>
+    </ConfirmModalProvider>
+  );
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      {authRequired ? (
+        <>
+          <AuthLoading />
+          <SignedIn>{appContent}</SignedIn>
+          <RedirectToSignIn />
+        </>
+      ) : (
+        appContent
+      )}
     </QueryClientProvider>
   );
 }

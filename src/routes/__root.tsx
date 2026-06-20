@@ -3,7 +3,7 @@ import { createRootRouteWithContext } from "@tanstack/react-router";
 
 import appCss from "../global.css?url";
 import { RootDocument } from "@/layouts/RootDocument";
-import { AppShell } from "@/layouts/AppShell";
+import { RootLayout } from "@/layouts/RootLayout";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { RouteErrorPage } from "@/pages/RouteErrorPage";
 
@@ -38,7 +38,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
   }),
   shellComponent: RootDocument,
-  component: AppShell,
+  component: RootLayout,
   notFoundComponent: NotFoundPage,
   errorComponent: RouteErrorPage,
 });

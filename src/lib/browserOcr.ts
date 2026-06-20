@@ -1,6 +1,7 @@
 import { createWorker, type Worker } from "tesseract.js";
 import type { ScanContact } from "./scanResult";
 import { parseOcrText } from "./scanParser";
+import { preprocessForOCR } from "./cardFrameAnalysis";
 
 import workerPath from "tesseract.js/dist/worker.min.js?url";
 import corePath from "tesseract.js-core/tesseract-core.wasm.js?url";
@@ -36,13 +37,36 @@ async function createTesseractWorker(): Promise<Worker> {
   });
 }
 
+/** Grayscale + contrast boost for Tesseract only — keeps stored/preview images in color. */
+async function fileForOcr(file: File): Promise<File | Blob> {
+  if (typeof document === "undefined") return file;
+
+  const bitmap = await createImageBitmap(file);
+  const canvas = document.createElement("canvas");
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    bitmap.close();
+    return file;
+  }
+  ctx.drawImage(bitmap, 0, 0);
+  bitmap.close();
+  preprocessForOCR(canvas);
+
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob ?? file), "image/jpeg", 0.92);
+  });
+}
+
 export async function runBrowserOcr(
   file: File,
 ): Promise<{ contact: ScanContact; rawText: string; ocrWarning?: string }> {
   let worker: Worker | null = null;
   try {
     worker = await createTesseractWorker();
-    const { data } = await worker.recognize(file);
+    const ocrInput = await fileForOcr(file);
+    const { data } = await worker.recognize(ocrInput);
     await worker.terminate();
     worker = null;
 

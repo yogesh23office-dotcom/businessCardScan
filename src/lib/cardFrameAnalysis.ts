@@ -72,31 +72,162 @@ export function preprocessForOCR(canvas: HTMLCanvasElement): ImageData {
   return imageData;
 }
 
-/** Business card frame region (normalized 0–1 coordinates). */
-export const CARD_FRAME = { x: 0.08, y: 0.28, w: 0.84, h: 0.38 };
+/** ISO 7810 ID-1 business card aspect (85.6 × 53.98 mm). */
+export const CARD_ASPECT = 1.586;
+
+/** Legacy normalized region — prefer `getCenteredCardCropRegion` for capture/analysis. */
+export const CARD_FRAME = { x: 0.06, y: 0.34, w: 0.88, h: 0.31 };
 
 export const ALIGN_MIN_SHARPNESS = 25;
 export const AUTO_CAPTURE_SHARPNESS = 70;
-export const AUTO_CAPTURE_STABLE_READINGS = 5;
-export const AUTO_CAPTURE_COUNTDOWN_SEC = 2;
+export const AUTO_CAPTURE_STABLE_READINGS = 4;
+/** Min card-likeness score (0–100) before auto-capture is allowed. */
+export const CARD_DETECT_MIN_SCORE = 42;
+
+export type NormalizedRegion = { x: number; y: number; w: number; h: number };
+
+/**
+ * Map the on-screen centered card guide to source-video coordinates (object-cover).
+ * Returns normalized 0–1 crop rect matching the UI frame.
+ */
+export function getCenteredCardCropRegion(
+  video: HTMLVideoElement,
+  maxGuideWidthPx = 440,
+): NormalizedRegion {
+  const { videoWidth, videoHeight } = video;
+  const displayW = video.clientWidth || videoWidth;
+  const displayH = video.clientHeight || videoHeight;
+
+  if (!videoWidth || !videoHeight || !displayW || !displayH) {
+    return CARD_FRAME;
+  }
+
+  const scale = Math.max(displayW / videoWidth, displayH / videoHeight);
+  const renderedW = videoWidth * scale;
+  const renderedH = videoHeight * scale;
+  const offsetX = (displayW - renderedW) / 2;
+  const offsetY = (displayH - renderedH) / 2;
+
+  const guideW = Math.min(displayW * 0.88, maxGuideWidthPx);
+  const guideH = guideW / CARD_ASPECT;
+  const guideX = (displayW - guideW) / 2;
+  const guideY = (displayH - guideH) / 2;
+
+  let sx = (guideX - offsetX) / scale;
+  let sy = (guideY - offsetY) / scale;
+  let sw = guideW / scale;
+  let sh = guideH / scale;
+
+  sx = Math.max(0, sx);
+  sy = Math.max(0, sy);
+  sw = Math.min(sw, videoWidth - sx);
+  sh = Math.min(sh, videoHeight - sy);
+
+  return {
+    x: sx / videoWidth,
+    y: sy / videoHeight,
+    w: sw / videoWidth,
+    h: sh / videoHeight,
+  };
+}
+
+/** Card presence: edge density + inner/outer contrast (0–100). */
+export function measureCardPresence(
+  video: HTMLVideoElement,
+  region: NormalizedRegion,
+): number {
+  if (video.videoWidth === 0 || video.videoHeight === 0) return 0;
+
+  const sampleW = 96;
+  const sampleH = Math.max(48, Math.round(sampleW / CARD_ASPECT));
+  const canvas = document.createElement("canvas");
+  canvas.width = sampleW;
+  canvas.height = sampleH;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return 0;
+
+  const sx = region.x * video.videoWidth;
+  const sy = region.y * video.videoHeight;
+  const sw = region.w * video.videoWidth;
+  const sh = region.h * video.videoHeight;
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sampleW, sampleH);
+
+  const { data } = ctx.getImageData(0, 0, sampleW, sampleH);
+  const gray = new Float32Array(sampleW * sampleH);
+  for (let i = 0; i < gray.length; i++) {
+    const o = i * 4;
+    gray[i] = 0.299 * data[o] + 0.587 * data[o + 1] + 0.114 * data[o + 2];
+  }
+
+  let edgeSum = 0;
+  let edgeCount = 0;
+  for (let y = 1; y < sampleH - 1; y++) {
+    for (let x = 1; x < sampleW - 1; x++) {
+      const idx = y * sampleW + x;
+      const gx = Math.abs(gray[idx + 1] - gray[idx - 1]);
+      const gy = Math.abs(gray[idx + sampleW] - gray[idx - sampleW]);
+      edgeSum += gx + gy;
+      edgeCount++;
+    }
+  }
+  const edgeDensity = edgeCount ? edgeSum / edgeCount : 0;
+
+  const margin = Math.max(2, Math.floor(Math.min(sampleW, sampleH) * 0.12));
+  let innerSum = 0;
+  let innerCount = 0;
+  let outerSum = 0;
+  let outerCount = 0;
+
+  for (let y = 0; y < sampleH; y++) {
+    for (let x = 0; x < sampleW; x++) {
+      const onBorder =
+        x < margin || y < margin || x >= sampleW - margin || y >= sampleH - margin;
+      const v = gray[y * sampleW + x];
+      if (onBorder) {
+        outerSum += v;
+        outerCount++;
+      } else {
+        innerSum += v;
+        innerCount++;
+      }
+    }
+  }
+
+  const innerMean = innerCount ? innerSum / innerCount : 0;
+  const outerMean = outerCount ? outerSum / outerCount : 0;
+  const contrast = Math.abs(innerMean - outerMean);
+
+  const edgeScore = Math.min(55, (edgeDensity / 18) * 55);
+  const contrastScore = Math.min(45, (contrast / 28) * 45);
+  return Math.round(edgeScore + contrastScore);
+}
 
 export type AlignmentStatus = "searching" | "aligning" | "hold-steady" | "ready";
 
 export function getAlignmentStatus(
   sharpness: number,
   stableCount: number,
-  countdown: number | null,
+  cardScore: number,
 ): AlignmentStatus {
-  if (countdown !== null && countdown > 0) return "ready";
-  if (stableCount >= AUTO_CAPTURE_STABLE_READINGS) return "hold-steady";
-  if (sharpness >= ALIGN_MIN_SHARPNESS) return "aligning";
+  if (stableCount >= AUTO_CAPTURE_STABLE_READINGS && cardScore >= CARD_DETECT_MIN_SCORE) {
+    return "ready";
+  }
+  if (stableCount >= Math.max(2, AUTO_CAPTURE_STABLE_READINGS - 1)) return "hold-steady";
+  if (sharpness >= ALIGN_MIN_SHARPNESS && cardScore >= CARD_DETECT_MIN_SCORE * 0.65) {
+    return "aligning";
+  }
   return "searching";
 }
 
-export function getAlignmentProgress(sharpness: number, stableCount: number): number {
-  const sharpPct = Math.min(100, (sharpness / AUTO_CAPTURE_SHARPNESS) * 70);
-  const stablePct = Math.min(30, (stableCount / AUTO_CAPTURE_STABLE_READINGS) * 30);
-  return Math.round(sharpPct + stablePct);
+export function getAlignmentProgress(
+  sharpness: number,
+  stableCount: number,
+  cardScore: number,
+): number {
+  const sharpPct = Math.min(45, (sharpness / AUTO_CAPTURE_SHARPNESS) * 45);
+  const cardPct = Math.min(35, (cardScore / CARD_DETECT_MIN_SCORE) * 35);
+  const stablePct = Math.min(20, (stableCount / AUTO_CAPTURE_STABLE_READINGS) * 20);
+  return Math.round(sharpPct + cardPct + stablePct);
 }
 
 function isMobileDevice(): boolean {

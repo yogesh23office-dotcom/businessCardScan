@@ -3,6 +3,9 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { HeaderSearch } from "@/components/layout/HeaderSearch";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { authClient } from "@/auth";
+import { isAuthEnabled } from "@/lib/authConfig";
+import { clearAuthTokenCache } from "@/lib/authSession";
 import { getQueueItems } from "@/lib/indexeddb";
 import { seedOfflineSampleContact } from "@/lib/contactStorage";
 import { isIndexedDbStorage } from "@/lib/storageConfig";
@@ -28,8 +31,30 @@ export function TopBar() {
   const [connectionMode, setConnectionModeState] = useState<ConnectionMode>("online");
   const [pendingCount, setPendingCount] = useState(0);
   const { fullName: profileName, initials: profileInitials } = useUserSettings();
+  const { data: authSession } = authClient.useSession();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
+
+  const displayName =
+    authSession?.user?.name?.trim() ||
+    authSession?.user?.email?.trim() ||
+    profileName ||
+    "User";
+
+  const avatarInitials =
+    authSession?.user?.name?.trim()?.slice(0, 2).toUpperCase() ||
+    authSession?.user?.email?.trim()?.slice(0, 2).toUpperCase() ||
+    profileInitials;
+
+  const handleSignOut = async () => {
+    clearAuthTokenCache();
+    if (isAuthEnabled) {
+      await authClient.signOut();
+      navigate({ to: "/auth/$pathname", params: { pathname: "sign-in" } });
+      return;
+    }
+    navigate({ to: "/scan" });
+  };
 
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isContacts = pathname.startsWith("/contacts");
@@ -152,7 +177,7 @@ export function TopBar() {
               title={isOnline ? "Online" : "Offline"}
               aria-label={`Profile menu — ${isOnline ? "online" : "offline"}`}
             >
-              {profileInitials}
+              {avatarInitials}
               <span
                 className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-background ${
                   isOnline ? "bg-green-500" : "bg-red-500"
@@ -164,14 +189,14 @@ export function TopBar() {
           <DropdownMenuContent align="end" className="w-48 rounded-xl">
             <DropdownMenuLabel className="flex items-center gap-2">
               <UserCircle2 className="h-4 w-4 shrink-0" />
-              <span className="truncate">{profileName}</span>
+              <span className="truncate">{displayName}</span>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => navigate({ to: "/settings" })}>
               <Settings className="mr-2 h-4 w-4" />
               Preferences
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => void handleSignOut()}>
               <LogOut className="mr-2 h-4 w-4" />
               Sign out
             </DropdownMenuItem>

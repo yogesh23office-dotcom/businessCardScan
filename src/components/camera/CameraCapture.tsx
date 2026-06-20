@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import Webcam from "react-webcam";
 import { Camera, Check, Loader2, RotateCcw, X, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  AUTO_CAPTURE_COUNTDOWN_SEC,
   AUTO_CAPTURE_SHARPNESS,
   AUTO_CAPTURE_STABLE_READINGS,
   ALIGN_MIN_SHARPNESS,
-  CARD_FRAME,
+  CARD_ASPECT,
+  CARD_DETECT_MIN_SCORE,
   getAlignmentProgress,
   getAlignmentStatus,
+  getCenteredCardCropRegion,
+  measureCardPresence,
   measureFrameSharpness,
   pickDefaultFacingMode,
-  requestCameraStream,
   type AlignmentStatus,
 } from "@/lib/cardFrameAnalysis";
 import { cn } from "@/lib/utils";
@@ -27,31 +29,67 @@ type Phase = "live" | "preview";
 const STATUS_COPY: Record<AlignmentStatus, { title: string; hint: string }> = {
   searching: {
     title: "Position your card",
-    hint: "Fill the frame with the business card",
+    hint: "Center the card inside the frame",
   },
   aligning: {
-    title: "Almost there…",
-    hint: "Move closer and keep the card flat",
+    title: "Card detected",
+    hint: "Hold steady and move closer if needed",
   },
   "hold-steady": {
-    title: "Hold steady",
+    title: "Almost ready",
     hint: "Keep the card still in the frame",
   },
   ready: {
     title: "Capturing…",
-    hint: "Don't move",
+    hint: "Card locked — taking photo",
   },
 };
 
+type ConstraintTier = 0 | 1 | 2;
+
+function buildVideoConstraints(
+  facingMode: "environment" | "user",
+  tier: ConstraintTier,
+): MediaTrackConstraints | boolean {
+  if (tier === 0) return true;
+  if (tier === 1) return { facingMode: { ideal: facingMode } };
+  return { facingMode };
+}
+
+function mapCameraError(err: string | DOMException): string {
+  const name = err instanceof DOMException ? err.name : "";
+  if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+    return "Camera blocked. Click the camera icon in your browser address bar → Allow, then tap Try again.";
+  }
+  if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+    return "No camera found. Use Choose from folder to upload a card photo.";
+  }
+  if (name === "NotReadableError" || name === "TrackStartError") {
+    return "Camera is busy (Zoom/Teams may be using it). Close other apps and try again.";
+  }
+  if (name === "OverconstrainedError") {
+    return "Camera settings not supported. Tap Try again — we will use a simpler mode.";
+  }
+  if (typeof err === "string" && err.trim()) return err;
+  return "Could not access the camera.";
+}
+
+function canvasToJpegFile(canvas: HTMLCanvasElement, name: string): File | null {
+  const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+  const byteString = atob(dataUrl.split(",")[1]);
+  const ab = new ArrayBuffer(byteString.length);
+  const ia = new Uint8Array(ab);
+  for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+  return new File([ab], name, { type: "image/jpeg" });
+}
+
 export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const webcamRef = useRef<Webcam>(null);
   const phaseRef = useRef<Phase>("live");
   const facingModeRef = useRef<"environment" | "user">(pickDefaultFacingMode());
   const stableCountRef = useRef(0);
   const analysisTimerRef = useRef<number | null>(null);
-  const countdownTimerRef = useRef<number | null>(null);
-  const startCameraRef = useRef<(mode?: "environment" | "user") => Promise<void>>(async () => {});
+  const triggerCaptureRef = useRef<() => void>(() => {});
 
   const [phase, setPhase] = useState<Phase>("live");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -59,100 +97,98 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<"environment" | "user">(pickDefaultFacingMode());
+  const [cameraKey, setCameraKey] = useState(0);
+  const [constraintTier, setConstraintTier] = useState<ConstraintTier>(0);
   const [sharpness, setSharpness] = useState(0);
+  const [cardScore, setCardScore] = useState(0);
   const [stableCount, setStableCount] = useState(0);
-  const [countdown, setCountdown] = useState<number | null>(null);
   const [alignmentStatus, setAlignmentStatus] = useState<AlignmentStatus>("searching");
   const [streamReady, setStreamReady] = useState(false);
 
   phaseRef.current = phase;
   facingModeRef.current = facingMode;
 
+  const getVideo = useCallback(() => webcamRef.current?.video ?? null, []);
+
   const stopAnalysis = useCallback(() => {
     if (analysisTimerRef.current) {
       window.clearInterval(analysisTimerRef.current);
       analysisTimerRef.current = null;
     }
-    if (countdownTimerRef.current) {
-      window.clearInterval(countdownTimerRef.current);
-      countdownTimerRef.current = null;
-    }
   }, []);
 
-  const stopStream = useCallback(() => {
-    stopAnalysis();
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    if (videoRef.current) videoRef.current.srcObject = null;
+  const resetLiveMetrics = useCallback(() => {
     stableCountRef.current = 0;
     setStreamReady(false);
     setStableCount(0);
-    setCountdown(null);
     setSharpness(0);
+    setCardScore(0);
     setAlignmentStatus("searching");
-  }, [stopAnalysis]);
+  }, []);
 
-  const snapFrame = useCallback(async (): Promise<File | null> => {
-    const video = videoRef.current;
+  /** Capture only the centered card frame — not the full camera view. */
+  const snapFrame = useCallback((): File | null => {
+    const video = getVideo();
     if (!video || video.videoWidth === 0) return null;
 
+    const region = getCenteredCardCropRegion(video);
+    const sx = Math.round(region.x * video.videoWidth);
+    const sy = Math.round(region.y * video.videoHeight);
+    const sw = Math.round(region.w * video.videoWidth);
+    const sh = Math.round(region.h * video.videoHeight);
+    if (sw <= 0 || sh <= 0) return null;
+
     const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.width = sw;
+    canvas.height = sh;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
-    ctx.drawImage(video, 0, 0);
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
 
-    // Apply OCR preprocessing for better text extraction
-    try {
-      const { preprocessForOCR } = await import("@/lib/cardFrameAnalysis");
-      preprocessForOCR(canvas);
-    } catch (err) {
-      console.warn("OCR preprocessing skipped:", err);
-    }
-
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
-    const byteString = atob(dataUrl.split(",")[1]);
-    const ab = new ArrayBuffer(byteString.length);
-    const ia = new Uint8Array(ab);
-    for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-    return new File([ab], `card-capture-${Date.now()}.jpg`, { type: "image/jpeg" });
-  }, []);
+    return canvasToJpegFile(canvas, `card-capture-${Date.now()}.jpg`);
+  }, [getVideo]);
 
   const enterPreview = useCallback(
     (file: File) => {
-      stopStream();
+      stopAnalysis();
       setCapturedFile(file);
       setPreviewUrl(URL.createObjectURL(file));
       phaseRef.current = "preview";
       setPhase("preview");
     },
-    [stopStream],
+    [stopAnalysis],
   );
 
-  const triggerCapture = useCallback(async () => {
+  const triggerCapture = useCallback(() => {
     if (phaseRef.current !== "live") return;
-    const file = await snapFrame();
+    const file = snapFrame();
     if (file) enterPreview(file);
   }, [snapFrame, enterPreview]);
 
-  const startAnalysisLoopRef = useRef<() => void>(() => {});
+  triggerCaptureRef.current = triggerCapture;
 
   const startAnalysisLoop = useCallback(() => {
     stopAnalysis();
     analysisTimerRef.current = window.setInterval(() => {
-      if (phaseRef.current !== "live" || countdownTimerRef.current) return;
+      if (phaseRef.current !== "live") return;
 
-      const video = videoRef.current;
+      const video = getVideo();
       if (!video) return;
 
-      const score = measureFrameSharpness(video, CARD_FRAME);
-      setSharpness(Math.round(score));
+      const region = getCenteredCardCropRegion(video);
+      const score = measureFrameSharpness(video, region);
+      const presence = measureCardPresence(video, region);
 
-      if (score >= AUTO_CAPTURE_SHARPNESS) {
+      setSharpness(Math.round(score));
+      setCardScore(presence);
+
+      const cardDetected = presence >= CARD_DETECT_MIN_SCORE;
+      const sharpEnough = score >= AUTO_CAPTURE_SHARPNESS;
+
+      if (cardDetected && sharpEnough) {
         stableCountRef.current += 1;
         setStableCount(stableCountRef.current);
-      } else if (score >= ALIGN_MIN_SHARPNESS) {
+      } else if (cardDetected && score >= ALIGN_MIN_SHARPNESS) {
         stableCountRef.current = Math.max(0, stableCountRef.current - 1);
         setStableCount(stableCountRef.current);
       } else {
@@ -160,133 +196,90 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
         setStableCount(0);
       }
 
-      setAlignmentStatus(getAlignmentStatus(score, stableCountRef.current, null));
+      const status = getAlignmentStatus(score, stableCountRef.current, presence);
+      setAlignmentStatus(status);
 
-      if (stableCountRef.current >= AUTO_CAPTURE_STABLE_READINGS && !countdownTimerRef.current) {
-        startCountdownRef.current();
+      if (
+        stableCountRef.current >= AUTO_CAPTURE_STABLE_READINGS &&
+        cardDetected &&
+        sharpEnough
+      ) {
+        setAlignmentStatus("ready");
+        triggerCaptureRef.current();
       }
-    }, 400);
-  }, [stopAnalysis]);
+    }, 350);
+  }, [stopAnalysis, getVideo]);
 
-  startAnalysisLoopRef.current = startAnalysisLoop;
+  const handleUserMedia = useCallback(() => {
+    setIsStarting(false);
+    setError(null);
+    setStreamReady(true);
+    startAnalysisLoop();
+  }, [startAnalysisLoop]);
 
-  const startCountdownRef = useRef<() => void>(() => {});
-
-  const startCountdown = useCallback(() => {
-    if (countdownTimerRef.current) return;
-    let remaining = AUTO_CAPTURE_COUNTDOWN_SEC;
-    setCountdown(remaining);
-    setAlignmentStatus("ready");
-
-    countdownTimerRef.current = window.setInterval(() => {
-      remaining -= 1;
-      if (remaining <= 0) {
-        if (countdownTimerRef.current) {
-          window.clearInterval(countdownTimerRef.current);
-          countdownTimerRef.current = null;
-        }
-        setCountdown(null);
-        triggerCapture();
+  const handleUserMediaError = useCallback(
+    (err: string | DOMException) => {
+      const name = err instanceof DOMException ? err.name : "";
+      if (name === "OverconstrainedError" && constraintTier < 2) {
+        setConstraintTier((tier) => (tier + 1) as ConstraintTier);
+        setIsStarting(true);
+        setStreamReady(false);
+        setCameraKey((key) => key + 1);
         return;
       }
-      setCountdown(remaining);
 
-      const video = videoRef.current;
-      if (video) {
-        const score = measureFrameSharpness(video, CARD_FRAME);
-        if (score < AUTO_CAPTURE_SHARPNESS * 0.75) {
-          if (countdownTimerRef.current) {
-            window.clearInterval(countdownTimerRef.current);
-            countdownTimerRef.current = null;
-          }
-          setCountdown(null);
-          stableCountRef.current = 0;
-          setStableCount(0);
-          setAlignmentStatus("aligning");
-          startAnalysisLoopRef.current();
-        }
-      }
-    }, 1000);
-  }, [triggerCapture]);
-
-  startCountdownRef.current = startCountdown;
-
-  const requestPermissionIfNeeded = useCallback(async () => {
-    try {
-      if (navigator.permissions?.query) {
-        const permission = await navigator.permissions.query({ name: "camera" as PermissionName });
-        if (permission.state === "prompt") {
-          console.log("Camera permission not set yet - will prompt on getUserMedia");
-        }
-      }
-    } catch (err) {
-      console.log("Permission query not supported");
-    }
-  }, []);
-
-  const startCamera = useCallback(async (mode?: "environment" | "user") => {
-    const facing = mode ?? facingModeRef.current;
-    setIsStarting(true);
-    setError(null);
-    setStreamReady(false);
-    stopStream();
-
-    try {
-      // Request permission first if needed
-      await requestPermissionIfNeeded();
-      
-      const stream = await requestCameraStream(facing);
-      streamRef.current = stream;
-      const video = videoRef.current;
-      if (video) {
-        video.srcObject = stream;
-        video.onloadedmetadata = () => {
-          video.play().catch(() => {});
-        };
-        await video.play().catch(async () => {
-          await new Promise((r) => setTimeout(r, 100));
-          await video.play();
-        });
-      }
-      setPhase("live");
-      phaseRef.current = "live";
-      setStreamReady(true);
-      startAnalysisLoop();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not access the camera.");
-    } finally {
       setIsStarting(false);
-    }
-  }, [stopStream, startAnalysisLoop, requestPermissionIfNeeded]);
+      setStreamReady(false);
+      setError(mapCameraError(err));
+      stopAnalysis();
+    },
+    [stopAnalysis, constraintTier],
+  );
 
-  startCameraRef.current = startCamera;
+  const restartCamera = useCallback(() => {
+    stopAnalysis();
+    resetLiveMetrics();
+    setError(null);
+    setConstraintTier(0);
+    setIsStarting(true);
+    setCameraKey((key) => key + 1);
+  }, [stopAnalysis, resetLiveMetrics]);
 
   useEffect(() => {
     if (!open) {
-      stopStream();
+      stopAnalysis();
       setPhase("live");
       phaseRef.current = "live";
       setPreviewUrl(null);
       setCapturedFile(null);
       setError(null);
+      setConstraintTier(0);
+      resetLiveMetrics();
       return;
     }
 
-    const frame = requestAnimationFrame(() => {
-      startCameraRef.current();
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-      stopStream();
-    };
-  }, [open, stopStream]);
+    if (!window.isSecureContext) {
+      setError("Camera requires HTTPS or localhost. Open the app at http://localhost:5173");
+      setIsStarting(false);
+      return;
+    }
+
+    if (phaseRef.current === "live") {
+      setConstraintTier(0);
+      setIsStarting(true);
+    }
+  }, [open, stopAnalysis, resetLiveMetrics]);
 
   const handleFlipCamera = () => {
     const next = facingMode === "environment" ? "user" : "environment";
     setFacingMode(next);
     facingModeRef.current = next;
     if (open && phaseRef.current === "live") {
-      startCameraRef.current(next);
+      stopAnalysis();
+      resetLiveMetrics();
+      setConstraintTier(1);
+      setIsStarting(true);
+      setCameraKey((key) => key + 1);
     }
   };
 
@@ -296,7 +289,7 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
     setCapturedFile(null);
     setPhase("live");
     phaseRef.current = "live";
-    startCameraRef.current();
+    restartCamera();
   };
 
   const handleContinue = () => {
@@ -307,29 +300,55 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
 
   const handleClose = () => {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
-    stopStream();
+    stopAnalysis();
     onClose();
   };
 
   if (!open) return null;
 
   const statusCopy = STATUS_COPY[alignmentStatus];
-  const alignmentProgress = getAlignmentProgress(sharpness, stableCount);
-  const frameReady = sharpness >= ALIGN_MIN_SHARPNESS;
+  const alignmentProgress = getAlignmentProgress(sharpness, stableCount, cardScore);
+  const cardDetected = cardScore >= CARD_DETECT_MIN_SCORE * 0.65;
   const canManualCapture = streamReady && !isStarting && !error;
+
+  const videoConstraints = buildVideoConstraints(facingMode, constraintTier);
+
+  const frameBorderClass =
+    alignmentStatus === "ready"
+      ? "border-emerald-400 shadow-[0_0_24px_rgba(52,211,153,0.45)]"
+      : alignmentStatus === "hold-steady"
+        ? "border-sky-400 shadow-[0_0_20px_rgba(56,189,248,0.35)]"
+        : cardDetected
+          ? "border-amber-300 shadow-[0_0_16px_rgba(252,211,77,0.3)]"
+          : "border-white/80";
+
+  const progressBarClass =
+    alignmentStatus === "ready" || alignmentStatus === "hold-steady"
+      ? "bg-emerald-400"
+      : cardDetected
+        ? "bg-amber-300"
+        : "bg-white/50";
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col bg-black" role="dialog" aria-modal="true">
       <div className="relative flex-1 overflow-hidden">
         {phase === "live" ? (
           <>
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className={cn("h-full w-full object-cover", (isStarting || error) && "opacity-0")}
-            />
+            {!error && (
+              <Webcam
+                key={`${facingMode}-${constraintTier}-${cameraKey}`}
+                ref={webcamRef}
+                audio={false}
+                mirrored={facingMode === "user"}
+                screenshotFormat="image/jpeg"
+                screenshotQuality={0.92}
+                forceScreenshotSourceSize
+                videoConstraints={videoConstraints}
+                onUserMedia={handleUserMedia}
+                onUserMediaError={handleUserMediaError}
+                className={cn("h-full w-full object-cover", (isStarting || error) && "opacity-0")}
+              />
+            )}
 
             {isStarting && (
               <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 text-white">
@@ -349,7 +368,7 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
                   <p className="text-sm text-white/70">{error}</p>
                 </div>
                 <div className="flex w-full max-w-xs flex-col gap-2">
-                  <Button className="w-full rounded-xl" onClick={() => startCameraRef.current()}>
+                  <Button className="w-full rounded-xl" onClick={restartCamera}>
                     Try again
                   </Button>
                   <Button variant="outline" className="w-full rounded-xl border-white/20 bg-white/5 text-white hover:bg-white/10" onClick={handleClose}>
@@ -364,72 +383,73 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                   <div
                     className={cn(
-                      "relative rounded-xl border-2 transition-colors duration-300 shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]",
-                      alignmentStatus === "ready"
-                        ? "border-success"
-                        : alignmentStatus === "hold-steady"
-                          ? "border-primary"
-                          : frameReady
-                            ? "border-amber-400"
-                            : "border-white/70",
+                      "relative rounded-2xl border-[2.5px] transition-all duration-300",
+                      frameBorderClass,
                     )}
                     style={{
-                      width: `${CARD_FRAME.w * 100}%`,
-                      height: `${CARD_FRAME.h * 100}%`,
-                      marginTop: `${(CARD_FRAME.y - 0.5 + CARD_FRAME.h / 2) * 100}%`,
+                      width: "min(88vw, 440px)",
+                      aspectRatio: CARD_ASPECT,
+                      boxShadow: "0 0 0 9999px rgba(0,0,0,0.62)",
                     }}
                   >
-                    {["top-0 left-0 border-l-[3px] border-t-[3px]", "top-0 right-0 border-r-[3px] border-t-[3px]", "bottom-0 left-0 border-l-[2px] border-b-[3px]", "bottom-0 right-0 border-r-[3px] border-b-[3px]"].map((c) => (
-                      <div key={c} className={`absolute h-7 w-7 border-inherit ${c}`} style={{ borderColor: "inherit" }} />
-                    ))}
-
-                    {countdown !== null && (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <span className="flex h-20 w-20 items-center justify-center rounded-full bg-black/60 text-4xl font-bold text-white backdrop-blur-sm">
-                          {countdown}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="absolute inset-x-0 top-0 z-10 flex items-start justify-between bg-gradient-to-b from-black/80 to-transparent px-4 pb-8 pt-4">
-                  <Button variant="ghost" size="icon" className="shrink-0 text-white hover:bg-white/20" onClick={handleClose} aria-label="Close camera">
-                    <X className="h-5 w-5" />
-                  </Button>
-
-                  <div className="mx-3 flex-1 text-center">
-                    <p className="text-sm font-semibold text-white">{statusCopy.title}</p>
-                    <p className="mt-0.5 text-xs text-white/65">{statusCopy.hint}</p>
-                    <div className="mx-auto mt-3 h-1.5 w-full max-w-[200px] overflow-hidden rounded-full bg-white/20">
+                    {(
+                      [
+                        "top-0 left-0 -translate-x-px -translate-y-px border-l-[3px] border-t-[3px] rounded-tl-lg",
+                        "top-0 right-0 translate-x-px -translate-y-px border-r-[3px] border-t-[3px] rounded-tr-lg",
+                        "bottom-0 left-0 -translate-x-px translate-y-px border-l-[3px] border-b-[3px] rounded-bl-lg",
+                        "bottom-0 right-0 translate-x-px translate-y-px border-r-[3px] border-b-[3px] rounded-br-lg",
+                      ] as const
+                    ).map((cornerClass) => (
                       <div
-                        className={cn(
-                          "h-full rounded-full transition-all duration-300",
-                          alignmentStatus === "ready" || alignmentStatus === "hold-steady"
-                            ? "bg-success"
-                            : frameReady
-                              ? "bg-amber-400"
-                              : "bg-white/40",
-                        )}
-                        style={{ width: `${alignmentProgress}%` }}
+                        key={cornerClass}
+                        className={cn("absolute h-8 w-8 border-inherit", cornerClass)}
+                        style={{ borderColor: "inherit" }}
                       />
-                    </div>
+                    ))}
                   </div>
-
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="shrink-0 text-white hover:bg-white/20"
-                    onClick={handleFlipCamera}
-                    aria-label="Switch camera"
-                  >
-                    <RotateCcw className="h-5 w-5" />
-                  </Button>
                 </div>
 
-                <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-4 pb-8 pt-16">
-                  <p className="mb-4 text-center text-[11px] text-white/50">
-                    Auto-captures when aligned · or tap the button anytime
+                <div className="absolute inset-x-0 top-0 z-10 px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))]">
+                  <div className="mx-auto flex max-w-lg items-center gap-3 rounded-2xl border border-white/10 bg-black/50 px-3 py-2.5 backdrop-blur-md">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 shrink-0 rounded-full text-white hover:bg-white/15"
+                      onClick={handleClose}
+                      aria-label="Close camera"
+                    >
+                      <X className="h-5 w-5" />
+                    </Button>
+
+                    <div className="min-w-0 flex-1 text-center">
+                      <p className="truncate text-sm font-semibold text-white">{statusCopy.title}</p>
+                      <p className="mt-0.5 truncate text-xs text-white/75">{statusCopy.hint}</p>
+                      <div className="mx-auto mt-2 h-1 w-full max-w-[180px] overflow-hidden rounded-full bg-white/20">
+                        <div
+                          className={cn("h-full rounded-full transition-all duration-300", progressBarClass)}
+                          style={{ width: `${alignmentProgress}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 shrink-0 rounded-full text-white hover:bg-white/15"
+                      onClick={handleFlipCamera}
+                      aria-label="Switch camera"
+                    >
+                      <RotateCcw className="h-5 w-5" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/95 via-black/60 to-transparent px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-20">
+                  <p className="mb-5 text-center text-sm font-medium text-white/85">
+                    Only the framed area is captured
+                  </p>
+                  <p className="mb-5 text-center text-xs text-white/55">
+                    Auto-captures when a card is detected · or tap below
                   </p>
                   <div className="flex justify-center">
                     <button
@@ -437,14 +457,22 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
                       onClick={triggerCapture}
                       disabled={!canManualCapture}
                       className={cn(
-                        "flex h-[72px] w-[72px] items-center justify-center rounded-full border-4 transition-all",
+                        "relative flex h-[76px] w-[76px] items-center justify-center rounded-full transition-all",
                         canManualCapture
-                          ? "border-white bg-white/25 hover:scale-105 active:scale-95"
-                          : "border-white/30 bg-white/10 opacity-50 cursor-not-allowed",
+                          ? "hover:scale-105 active:scale-95"
+                          : "opacity-45 cursor-not-allowed",
                       )}
                       aria-label="Capture manually"
                     >
-                      <Camera className="h-8 w-8 text-white" />
+                      <span className="absolute inset-0 rounded-full border-[3px] border-white/90" />
+                      <span
+                        className={cn(
+                          "flex h-[60px] w-[60px] items-center justify-center rounded-full",
+                          canManualCapture ? "bg-white" : "bg-white/40",
+                        )}
+                      >
+                        <Camera className={cn("h-7 w-7", canManualCapture ? "text-black" : "text-white/70")} />
+                      </span>
                     </button>
                   </div>
                 </div>

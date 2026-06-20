@@ -36,6 +36,7 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
   const listeningRef = useRef(false);
   const baseTextRef = useRef("");
   const sessionFinalRef = useRef("");
+  const processedFinalIndexRef = useRef(0);
   const onTextRef = useRef<(text: string) => void>(() => {});
 
   const onUnsupportedRef = useRef(options.onUnsupported);
@@ -50,11 +51,20 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
     setSupported(createSpeechRecognition() !== null);
   }, []);
 
+  const commitSessionToBase = useCallback(() => {
+    if (!sessionFinalRef.current.trim()) return;
+    baseTextRef.current = capNotes(joinDictation(baseTextRef.current, sessionFinalRef.current));
+    sessionFinalRef.current = "";
+    processedFinalIndexRef.current = 0;
+    onTextRef.current(baseTextRef.current);
+  }, []);
+
   const stopListening = useCallback(() => {
     listeningRef.current = false;
     setListening(false);
+    commitSessionToBase();
     recognitionRef.current?.stop();
-  }, []);
+  }, [commitSessionToBase]);
 
   const startListening = useCallback(
     (baseText: string, onText: (text: string) => void) => {
@@ -68,6 +78,7 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
       recognitionRef.current = recognition;
       baseTextRef.current = baseText;
       sessionFinalRef.current = "";
+      processedFinalIndexRef.current = 0;
       onTextRef.current = onText;
       listeningRef.current = true;
       setListening(true);
@@ -78,12 +89,18 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
 
       recognition.onresult = (event) => {
         let interim = "";
-        for (let index = event.resultIndex; index < event.results.length; index += 1) {
+
+        for (let index = 0; index < event.results.length; index += 1) {
           const result = event.results[index];
           const transcript = result[0]?.transcript ?? "";
+          if (!transcript) continue;
+
           if (result.isFinal) {
-            sessionFinalRef.current = joinDictation(sessionFinalRef.current, transcript);
-          } else {
+            if (index >= processedFinalIndexRef.current) {
+              sessionFinalRef.current = joinDictation(sessionFinalRef.current, transcript);
+              processedFinalIndexRef.current = index + 1;
+            }
+          } else if (index >= processedFinalIndexRef.current) {
             interim = joinDictation(interim, transcript);
           }
         }
@@ -100,6 +117,15 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
 
       recognition.onend = () => {
         if (!listeningRef.current) return;
+        // Roll finalized speech into base before restart so the next session
+        // does not re-append the same finals from a fresh results list.
+        if (sessionFinalRef.current.trim()) {
+          baseTextRef.current = capNotes(joinDictation(baseTextRef.current, sessionFinalRef.current));
+          sessionFinalRef.current = "";
+          onTextRef.current(baseTextRef.current);
+        }
+        processedFinalIndexRef.current = 0;
+
         try {
           recognition.start();
         } catch {

@@ -2,6 +2,7 @@ import { getConnectionMode } from "@/lib/connectionMode";
 import type { LeadPayload } from "@/lib/cardImage";
 import type { QueueItem } from "@/lib/indexeddb";
 import { API_BASE_URL } from "@/lib/api";
+import { apiFetch } from "@/lib/apiFetch";
 import {
   syncAllPendingContactsToZoho,
   syncContactToZoho,
@@ -70,7 +71,7 @@ export function getLocalDbUrl(): string {
 /** True when Python API is up and the configured storage backend is reachable. */
 export async function checkLocalDbHealth(): Promise<boolean> {
   try {
-    const res = await fetch(`${API}/health`, { signal: AbortSignal.timeout(5000) });
+    const res = await apiFetch(`${API}/health`, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) return false;
     const data = (await res.json()) as {
       ok?: boolean;
@@ -109,7 +110,7 @@ export async function saveContactToLocalDb(
   cardImageBase64?: string,
   options?: { connectionMode?: "online" | "offline"; skipWhatsApp?: boolean; skipEmail?: boolean },
 ): Promise<SaveContactResult> {
-  const response = await fetch(`${API}/api/contacts`, {
+  const response = await apiFetch(`${API}/api/contacts`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payloadToLocalBody(payload, cardImageBase64, options)),
@@ -161,7 +162,7 @@ export async function updateContactInLocalDb(
   contactId: string,
   payload: LeadPayload,
 ): Promise<void> {
-  const response = await fetch(`${API}/api/contacts/${contactId}`, {
+  const response = await apiFetch(`${API}/api/contacts/${contactId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payloadToLocalBody(payload)),
@@ -174,7 +175,7 @@ export async function updateContactInLocalDb(
 }
 
 export async function listLocalContacts(): Promise<LocalContact[]> {
-  const response = await fetch(`${API}/api/contacts`);
+  const response = await apiFetch(`${API}/api/contacts`);
   if (!response.ok) {
     throw new Error(`Failed to load contacts (${response.status})`);
   }
@@ -188,7 +189,7 @@ export async function deleteLocalContact(contactId: string, deleteZoho = false):
     url.searchParams.set("deleteZoho", "true");
   }
 
-  const response = await fetch(url.toString(), {
+  const response = await apiFetch(url.toString(), {
     method: "DELETE",
   });
   if (!response.ok) {
@@ -278,7 +279,7 @@ export function localContactToPayload(contact: LocalContact): LeadPayload {
 }
 
 export async function getLocalContactById(contactId: string): Promise<LocalContact> {
-  const response = await fetch(`${API}/api/contacts/${contactId}`);
+  const response = await apiFetch(`${API}/api/contacts/${contactId}`);
   if (!response.ok) {
     throw new Error(`Contact not found (${response.status})`);
   }
@@ -289,7 +290,7 @@ export async function markLocalContactSyncedZoho(
   contactId: string,
   zohoLeadId: string,
 ): Promise<void> {
-  const response = await fetch(`${API}/api/contacts/${contactId}/sync-status`, {
+  const response = await apiFetch(`${API}/api/contacts/${contactId}/sync-status`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ syncStatus: "synced_zoho", zohoLeadId }),
@@ -336,7 +337,7 @@ export async function sendThankYouOutreach(
     skipEmail?: boolean;
   },
 ): Promise<ThankYouOutreachResult> {
-  const response = await fetch(`${API}/api/outreach/thank-you`, {
+  const response = await apiFetch(`${API}/api/outreach/thank-you`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(

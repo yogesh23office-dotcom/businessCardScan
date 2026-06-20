@@ -1,4 +1,5 @@
 import { getConnectionMode } from "@/lib/connectionMode";
+import { apiFetch } from "@/lib/apiFetch";
 import { buildZohoLeadLookup, isDuplicateOfZohoLead } from "@/lib/contactListMerge";
 import { getZohoLeadsUrl } from "@/lib/backendTargets";
 import { listContacts, storageLabel } from "@/lib/contactStorage";
@@ -123,7 +124,7 @@ async function fetchContactsDirectoryFromSources(): Promise<ContactsDirectorySna
   }
 
   const zohoResult = await Promise.allSettled([
-    fetch(getZohoLeadsUrl()).then(async (response) => {
+    apiFetch(getZohoLeadsUrl()).then(async (response) => {
       if (!response.ok) throw new Error(response.statusText);
       return response.json();
     }),

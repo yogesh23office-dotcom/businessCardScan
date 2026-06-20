@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "@/lib/api";
+import { apiFetch } from "@/lib/apiFetch";
 import type { LeadPayload } from "@/lib/cardImage";
 
 export type WhatsAppChatLinkConfig = {
@@ -36,10 +37,10 @@ function payloadToRegisterBody(payload: LeadPayload) {
   };
 }
 
-export async function fetchWhatsAppChatLink(
+export async function apiFetchWhatsAppChatLink(
   prefill = "Hi, verify my number",
 ): Promise<WhatsAppChatLinkConfig> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/integrations/whatsapp/chat-link?prefill=${encodeURIComponent(prefill)}`,
   );
   const data = (await response.json()) as WhatsAppChatLinkConfig & { detail?: string };
@@ -52,7 +53,7 @@ export async function fetchWhatsAppChatLink(
 export async function registerWhatsAppChatReply(
   payload: LeadPayload,
 ): Promise<WhatsAppChatReplyRegistration> {
-  const response = await fetch(`${API_BASE_URL}/integrations/whatsapp/register-chat-reply`, {
+  const response = await apiFetch(`${API_BASE_URL}/integrations/whatsapp/register-chat-reply`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payloadToRegisterBody(payload)),
@@ -79,7 +80,7 @@ export type WhatsAppVerifyStart = WhatsAppChatReplyRegistration & {
 export async function startWhatsAppVerify(
   payload: Partial<LeadPayload> & { phone: string },
 ): Promise<WhatsAppVerifyStart> {
-  const response = await fetch(`${API_BASE_URL}/integrations/whatsapp/start-verify`, {
+  const response = await apiFetch(`${API_BASE_URL}/integrations/whatsapp/start-verify`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payloadToRegisterBody(payload as LeadPayload)),
@@ -91,8 +92,8 @@ export async function startWhatsAppVerify(
   return data;
 }
 
-export async function fetchWhatsAppVerifyStatus(phone: string): Promise<WhatsAppVerifyStatus> {
-  const response = await fetch(
+export async function apiFetchWhatsAppVerifyStatus(phone: string): Promise<WhatsAppVerifyStatus> {
+  const response = await apiFetch(
     `${API_BASE_URL}/integrations/whatsapp/verify-status?phone=${encodeURIComponent(phone)}`,
   );
   const data = (await response.json()) as WhatsAppVerifyStatus & { detail?: string };

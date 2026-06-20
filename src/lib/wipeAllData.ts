@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "@/lib/api";
+import { apiFetch } from "@/lib/apiFetch";
 import { clearAllBrowserData, clearSyncQueue } from "@/lib/indexeddb";
 
 export type WipeResult = {
@@ -13,7 +14,7 @@ export async function wipeAllAppData(options?: {
   const includeZoho = options?.includeZoho !== false;
   const result: WipeResult = {};
 
-  const backendRes = await fetch(`${API_BASE_URL}/admin/wipe-all-data`, {
+  const backendRes = await apiFetch(`${API_BASE_URL}/admin/wipe-all-data`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ confirm: true, include_zoho: includeZoho }),

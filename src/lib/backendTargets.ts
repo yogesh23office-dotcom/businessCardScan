@@ -7,7 +7,10 @@ export function getScanApiBaseUrl(): string {
   if (API_BASE_URL) {
     return API_BASE_URL;
   }
-  return import.meta.env.DEV ? "http://127.0.0.1:5000" : PRODUCTION_API_URL;
+  if (import.meta.env.DEV) {
+    return "";
+  }
+  return PRODUCTION_API_URL;
 }
 
 /** True when OCR runs on this PC (works without internet). */

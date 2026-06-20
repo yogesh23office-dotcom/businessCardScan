@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "@/lib/api";
+import { apiFetch } from "@/lib/apiFetch";
 import { parseApiErrorDetail } from "@/lib/apiErrors";
 import {
   getDeleteContactUrl,
@@ -63,7 +64,7 @@ export async function seedOfflineSampleContact(): Promise<{
   id?: string;
 }> {
   try {
-    const response = await fetch(`${API_BASE_URL}/contacts/seed-sample`, {
+    const response = await apiFetch(`${API_BASE_URL}/contacts/seed-sample`, {
       method: "POST",
     });
     if (!response.ok) {
@@ -78,7 +79,7 @@ export async function seedOfflineSampleContact(): Promise<{
 export async function saveLeadToZoho(payload: LeadPayload): Promise<void> {
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}/api/leads/create`, {
+    response = await apiFetch(`${API_BASE_URL}/api/leads/create`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -107,7 +108,7 @@ export async function syncPayloadToZoho(
 ): Promise<ZohoSyncResult> {
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}/api/leads/sync-from-local`, {
+    response = await apiFetch(`${API_BASE_URL}/api/leads/sync-from-local`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -158,7 +159,7 @@ export async function syncContactToZoho(
 ): Promise<ZohoSyncResult> {
   let response: Response;
   try {
-    response = await fetch(getSyncContactToZohoUrl(contactId), {
+    response = await apiFetch(getSyncContactToZohoUrl(contactId), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -191,7 +192,7 @@ export async function deleteZohoLead(leadId: string): Promise<void> {
 
   let response: Response;
   try {
-    response = await fetch(getDeleteContactUrl(id, "zoho"), {
+    response = await apiFetch(getDeleteContactUrl(id, "zoho"), {
       method: "DELETE",
     });
   } catch {
@@ -212,7 +213,7 @@ export async function syncAllPendingContactsToZoho(): Promise<{
 }> {
   let response: Response;
   try {
-    response = await fetch(getSyncPendingToZohoUrl(), {
+    response = await apiFetch(getSyncPendingToZohoUrl(), {
       method: "POST",
     });
   } catch {
