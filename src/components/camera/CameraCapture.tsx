@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Webcam from "react-webcam";
-import { Camera, Check, Loader2, RotateCcw, X, AlertCircle } from "lucide-react";
+import { Camera, Check, Loader2, SwitchCamera, X, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AUTO_CAPTURE_SHARPNESS,
@@ -13,6 +13,8 @@ import {
   getCenteredCardCropRegion,
   measureCardPresence,
   measureFrameSharpness,
+  buildWebcamVideoConstraints,
+  initialWebcamConstraintTier,
   isMobileDevice,
   pickDefaultFacingMode,
   type AlignmentStatus,
@@ -47,22 +49,6 @@ const STATUS_COPY: Record<AlignmentStatus, { title: string; hint: string }> = {
 };
 
 type ConstraintTier = 0 | 1 | 2;
-
-function initialConstraintTier(): ConstraintTier {
-  // Mobile: prefer rear camera; desktop: unconstrained for single webcam
-  return isMobileDevice() ? 1 : 0;
-}
-
-function buildVideoConstraints(
-  facingMode: "environment" | "user",
-  tier: ConstraintTier,
-): MediaTrackConstraints | boolean {
-  if (tier === 0) {
-    return isMobileDevice() ? { facingMode } : true;
-  }
-  if (tier === 1) return { facingMode: { ideal: facingMode } };
-  return { facingMode };
-}
 
 function mapCameraError(err: string | DOMException): string {
   const name = err instanceof DOMException ? err.name : "";
@@ -106,7 +92,7 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
   const [error, setError] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<"environment" | "user">(pickDefaultFacingMode());
   const [cameraKey, setCameraKey] = useState(0);
-  const [constraintTier, setConstraintTier] = useState<ConstraintTier>(initialConstraintTier);
+  const [constraintTier, setConstraintTier] = useState<ConstraintTier>(initialWebcamConstraintTier);
   const [sharpness, setSharpness] = useState(0);
   const [cardScore, setCardScore] = useState(0);
   const [stableCount, setStableCount] = useState(0);
@@ -228,8 +214,15 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
   const handleUserMediaError = useCallback(
     (err: string | DOMException) => {
       const name = err instanceof DOMException ? err.name : "";
-      if (name === "OverconstrainedError" && constraintTier < 2) {
-        setConstraintTier((tier) => (tier + 1) as ConstraintTier);
+      if (name === "OverconstrainedError" && constraintTier > 0) {
+        setConstraintTier((tier) => (tier - 1) as ConstraintTier);
+        setIsStarting(true);
+        setStreamReady(false);
+        setCameraKey((key) => key + 1);
+        return;
+      }
+      if (name === "OverconstrainedError" && constraintTier === 0 && !isMobileDevice()) {
+        setConstraintTier(1);
         setIsStarting(true);
         setStreamReady(false);
         setCameraKey((key) => key + 1);
@@ -248,7 +241,7 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
     stopAnalysis();
     resetLiveMetrics();
     setError(null);
-    setConstraintTier(initialConstraintTier());
+    setConstraintTier(initialWebcamConstraintTier());
     setIsStarting(true);
     setCameraKey((key) => key + 1);
   }, [stopAnalysis, resetLiveMetrics]);
@@ -261,7 +254,7 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
       setPreviewUrl(null);
       setCapturedFile(null);
       setError(null);
-      setConstraintTier(initialConstraintTier());
+      setConstraintTier(initialWebcamConstraintTier());
       resetLiveMetrics();
       return;
     }
@@ -273,7 +266,7 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
     }
 
     if (phaseRef.current === "live") {
-      setConstraintTier(initialConstraintTier());
+      setConstraintTier(initialWebcamConstraintTier());
       setIsStarting(true);
     }
   }, [open, stopAnalysis, resetLiveMetrics]);
@@ -285,7 +278,7 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
     if (open && phaseRef.current === "live") {
       stopAnalysis();
       resetLiveMetrics();
-      setConstraintTier(1);
+      setConstraintTier(initialWebcamConstraintTier());
       setIsStarting(true);
       setCameraKey((key) => key + 1);
     }
@@ -319,7 +312,10 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
   const cardDetected = cardScore >= CARD_DETECT_MIN_SCORE * 0.65;
   const canManualCapture = streamReady && !isStarting && !error;
 
-  const videoConstraints = buildVideoConstraints(facingMode, constraintTier);
+  const videoConstraints = buildWebcamVideoConstraints(facingMode, constraintTier);
+  const cameraLabel = facingMode === "environment" ? "Back camera" : "Front camera";
+  const flipCameraLabel =
+    facingMode === "environment" ? "Switch to front camera" : "Switch to back camera";
 
   const frameBorderClass =
     alignmentStatus === "ready"
@@ -432,6 +428,11 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
                     <div className="min-w-0 flex-1 text-center">
                       <p className="truncate text-sm font-semibold text-white">{statusCopy.title}</p>
                       <p className="mt-0.5 truncate text-xs text-white/75">{statusCopy.hint}</p>
+                      {isMobileDevice() && streamReady && (
+                        <p className="mt-1 truncate text-[10px] font-medium uppercase tracking-wide text-cyan-300/90">
+                          {cameraLabel}
+                        </p>
+                      )}
                       <div className="mx-auto mt-2 h-1 w-full max-w-[180px] overflow-hidden rounded-full bg-white/20">
                         <div
                           className={cn("h-full rounded-full transition-all duration-300", progressBarClass)}
@@ -442,12 +443,20 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
 
                     <Button
                       variant="ghost"
-                      size="icon"
-                      className="h-9 w-9 shrink-0 rounded-full text-white hover:bg-white/15"
+                      className={cn(
+                        "h-9 shrink-0 rounded-full text-white hover:bg-white/15",
+                        isMobileDevice() ? "gap-1 px-2.5" : "w-9 px-0",
+                      )}
                       onClick={handleFlipCamera}
-                      aria-label="Switch camera"
+                      aria-label={flipCameraLabel}
+                      title={flipCameraLabel}
                     >
-                      <RotateCcw className="h-5 w-5" />
+                      <SwitchCamera className="h-5 w-5 shrink-0" />
+                      {isMobileDevice() && (
+                        <span className="text-[10px] font-semibold leading-none">
+                          {facingMode === "environment" ? "Front" : "Back"}
+                        </span>
+                      )}
                     </Button>
                   </div>
                 </div>
@@ -459,6 +468,11 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
                   <p className="mb-5 text-center text-xs text-white/55">
                     Auto-captures when a card is detected · or tap below
                   </p>
+                  {isMobileDevice() && (
+                    <p className="mb-4 text-center text-xs text-cyan-200/80">
+                      Wrong camera? Tap <span className="font-semibold">Back</span> (top-right) for rear camera
+                    </p>
+                  )}
                   <div className="flex justify-center">
                     <button
                       type="button"

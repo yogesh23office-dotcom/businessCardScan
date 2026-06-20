@@ -235,9 +235,33 @@ export function isMobileDevice(): boolean {
   return /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent);
 }
 
+export function isIOSDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
 export function pickDefaultFacingMode(): "environment" | "user" {
   // Laptops/desktops only have a front webcam — "environment" fails on Windows
   return isMobileDevice() ? "environment" : "user";
+}
+
+/** MediaTrackConstraints for react-webcam — tier 2 = strictest (best for iPhone rear cam). */
+export function buildWebcamVideoConstraints(
+  facingMode: "environment" | "user",
+  tier: 0 | 1 | 2,
+): MediaTrackConstraints | boolean {
+  if (tier === 0) {
+    return isMobileDevice() ? { facingMode: { ideal: facingMode } } : true;
+  }
+  if (tier === 1) {
+    return { facingMode: { ideal: facingMode } };
+  }
+  // tier 2 — exact facingMode; iOS Safari often ignores "ideal" and opens the selfie cam
+  return { facingMode: { exact: facingMode } };
+}
+
+export function initialWebcamConstraintTier(): 0 | 1 | 2 {
+  return isMobileDevice() ? 2 : 0;
 }
 
 async function enumerateVideoInputs(): Promise<MediaDeviceInfo[]> {
