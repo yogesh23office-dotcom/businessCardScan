@@ -36,7 +36,6 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
   const listeningRef = useRef(false);
   const baseTextRef = useRef("");
   const sessionFinalRef = useRef("");
-  const processedFinalIndexRef = useRef(0);
   const onTextRef = useRef<(text: string) => void>(() => {});
 
   const onUnsupportedRef = useRef(options.onUnsupported);
@@ -51,11 +50,15 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
     setSupported(createSpeechRecognition() !== null);
   }, []);
 
+  const publishDisplayText = useCallback((interim = "") => {
+    const spoken = joinDictation(sessionFinalRef.current, interim);
+    onTextRef.current(capNotes(joinDictation(baseTextRef.current, spoken)));
+  }, []);
+
   const commitSessionToBase = useCallback(() => {
     if (!sessionFinalRef.current.trim()) return;
     baseTextRef.current = capNotes(joinDictation(baseTextRef.current, sessionFinalRef.current));
     sessionFinalRef.current = "";
-    processedFinalIndexRef.current = 0;
     onTextRef.current(baseTextRef.current);
   }, []);
 
@@ -78,7 +81,6 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
       recognitionRef.current = recognition;
       baseTextRef.current = baseText;
       sessionFinalRef.current = "";
-      processedFinalIndexRef.current = 0;
       onTextRef.current = onText;
       listeningRef.current = true;
       setListening(true);
@@ -88,25 +90,23 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
       recognition.lang = lang;
 
       recognition.onresult = (event) => {
-        let interim = "";
+        if (!listeningRef.current) return;
 
-        for (let index = 0; index < event.results.length; index += 1) {
+        let interim = "";
+        // Only consume NEW results — prevents duplicate text when the engine restarts.
+        for (let index = event.resultIndex; index < event.results.length; index += 1) {
           const result = event.results[index];
           const transcript = result[0]?.transcript ?? "";
           if (!transcript) continue;
 
           if (result.isFinal) {
-            if (index >= processedFinalIndexRef.current) {
-              sessionFinalRef.current = joinDictation(sessionFinalRef.current, transcript);
-              processedFinalIndexRef.current = index + 1;
-            }
-          } else if (index >= processedFinalIndexRef.current) {
+            sessionFinalRef.current = joinDictation(sessionFinalRef.current, transcript);
+          } else {
             interim = joinDictation(interim, transcript);
           }
         }
 
-        const spoken = joinDictation(sessionFinalRef.current, interim);
-        onTextRef.current(capNotes(joinDictation(baseTextRef.current, spoken)));
+        publishDisplayText(interim);
       };
 
       recognition.onerror = (event) => {
@@ -117,14 +117,8 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
 
       recognition.onend = () => {
         if (!listeningRef.current) return;
-        // Roll finalized speech into base before restart so the next session
-        // does not re-append the same finals from a fresh results list.
-        if (sessionFinalRef.current.trim()) {
-          baseTextRef.current = capNotes(joinDictation(baseTextRef.current, sessionFinalRef.current));
-          sessionFinalRef.current = "";
-          onTextRef.current(baseTextRef.current);
-        }
-        processedFinalIndexRef.current = 0;
+
+        commitSessionToBase();
 
         try {
           recognition.start();
@@ -140,7 +134,7 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
         stopListening();
       }
     },
-    [lang, stopListening],
+    [commitSessionToBase, lang, publishDisplayText, stopListening],
   );
 
   useEffect(() => () => recognitionRef.current?.abort(), []);

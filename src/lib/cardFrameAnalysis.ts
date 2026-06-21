@@ -78,11 +78,17 @@ export const CARD_ASPECT = 1.586;
 /** Legacy normalized region — prefer `getCenteredCardCropRegion` for capture/analysis. */
 export const CARD_FRAME = { x: 0.06, y: 0.34, w: 0.88, h: 0.31 };
 
-export const ALIGN_MIN_SHARPNESS = 25;
-export const AUTO_CAPTURE_SHARPNESS = 70;
-export const AUTO_CAPTURE_STABLE_READINGS = 4;
+export const ALIGN_MIN_SHARPNESS = 35;
+export const AUTO_CAPTURE_SHARPNESS = 95;
+export const AUTO_CAPTURE_STABLE_READINGS = 8;
+/** Hold steady this long after all checks pass before auto-shutter (ms). */
+export const AUTO_CAPTURE_HOLD_MS = 1400;
+/** Ignore auto-capture until the camera has warmed up (ms). */
+export const AUTO_CAPTURE_WARMUP_MS = 2500;
 /** Min card-likeness score (0–100) before auto-capture is allowed. */
-export const CARD_DETECT_MIN_SCORE = 42;
+export const CARD_DETECT_MIN_SCORE = 60;
+/** Min inner-region luminance variance — rejects blank/dark blur false positives. */
+export const CARD_MIN_INNER_VARIANCE = 180;
 
 export type NormalizedRegion = { x: number; y: number; w: number; h: number };
 
@@ -197,9 +203,25 @@ export function measureCardPresence(
   const outerMean = outerCount ? outerSum / outerCount : 0;
   const contrast = Math.abs(innerMean - outerMean);
 
-  const edgeScore = Math.min(55, (edgeDensity / 18) * 55);
-  const contrastScore = Math.min(45, (contrast / 28) * 45);
-  return Math.round(edgeScore + contrastScore);
+  let innerVarSum = 0;
+  for (let y = margin; y < sampleH - margin; y++) {
+    for (let x = margin; x < sampleW - margin; x++) {
+      const v = gray[y * sampleW + x];
+      const delta = v - innerMean;
+      innerVarSum += delta * delta;
+    }
+  }
+  const innerVariance = innerCount ? innerVarSum / innerCount : 0;
+
+  // Dark blur / lens cap — high edge noise but no printable card content
+  if (innerMean < 48 || innerVariance < CARD_MIN_INNER_VARIANCE * 0.45) {
+    return 0;
+  }
+
+  const edgeScore = Math.min(40, (edgeDensity / 22) * 40);
+  const contrastScore = Math.min(35, (contrast / 32) * 35);
+  const textureScore = Math.min(25, (innerVariance / CARD_MIN_INNER_VARIANCE) * 25);
+  return Math.round(edgeScore + contrastScore + textureScore);
 }
 
 export type AlignmentStatus = "searching" | "aligning" | "hold-steady" | "ready";

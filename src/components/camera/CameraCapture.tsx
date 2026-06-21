@@ -3,8 +3,10 @@ import Webcam from "react-webcam";
 import { Camera, Check, Loader2, SwitchCamera, X, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
+  AUTO_CAPTURE_HOLD_MS,
   AUTO_CAPTURE_SHARPNESS,
   AUTO_CAPTURE_STABLE_READINGS,
+  AUTO_CAPTURE_WARMUP_MS,
   ALIGN_MIN_SHARPNESS,
   CARD_ASPECT,
   CARD_DETECT_MIN_SCORE,
@@ -84,6 +86,9 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
   const stableCountRef = useRef(0);
   const analysisTimerRef = useRef<number | null>(null);
   const triggerCaptureRef = useRef<() => void>(() => {});
+  const streamReadyAtRef = useRef(0);
+  const readyHoldStartedAtRef = useRef<number | null>(null);
+  const autoCaptureLockedRef = useRef(false);
 
   const [phase, setPhase] = useState<Phase>("live");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -113,6 +118,8 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
 
   const resetLiveMetrics = useCallback(() => {
     stableCountRef.current = 0;
+    readyHoldStartedAtRef.current = null;
+    autoCaptureLockedRef.current = false;
     setStreamReady(false);
     setStableCount(0);
     setSharpness(0);
@@ -154,9 +161,11 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
   );
 
   const triggerCapture = useCallback(() => {
-    if (phaseRef.current !== "live") return;
+    if (phaseRef.current !== "live" || autoCaptureLockedRef.current) return;
+    autoCaptureLockedRef.current = true;
     const file = snapFrame();
     if (file) enterPreview(file);
+    else autoCaptureLockedRef.current = false;
   }, [snapFrame, enterPreview]);
 
   triggerCaptureRef.current = triggerCapture;
@@ -178,35 +187,48 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
 
       const cardDetected = presence >= CARD_DETECT_MIN_SCORE;
       const sharpEnough = score >= AUTO_CAPTURE_SHARPNESS;
+      const warmedUp =
+        streamReadyAtRef.current > 0 &&
+        Date.now() - streamReadyAtRef.current >= AUTO_CAPTURE_WARMUP_MS;
 
-      if (cardDetected && sharpEnough) {
+      if (cardDetected && sharpEnough && warmedUp) {
         stableCountRef.current += 1;
         setStableCount(stableCountRef.current);
-      } else if (cardDetected && score >= ALIGN_MIN_SHARPNESS) {
+      } else if (cardDetected && score >= ALIGN_MIN_SHARPNESS && warmedUp) {
         stableCountRef.current = Math.max(0, stableCountRef.current - 1);
         setStableCount(stableCountRef.current);
+        readyHoldStartedAtRef.current = null;
       } else {
         stableCountRef.current = 0;
         setStableCount(0);
+        readyHoldStartedAtRef.current = null;
       }
 
       const status = getAlignmentStatus(score, stableCountRef.current, presence);
       setAlignmentStatus(status);
 
-      if (
+      const readyForHold =
+        warmedUp &&
         stableCountRef.current >= AUTO_CAPTURE_STABLE_READINGS &&
         cardDetected &&
-        sharpEnough
-      ) {
-        setAlignmentStatus("ready");
-        triggerCaptureRef.current();
+        sharpEnough;
+
+      if (readyForHold) {
+        if (readyHoldStartedAtRef.current === null) {
+          readyHoldStartedAtRef.current = Date.now();
+          setAlignmentStatus("ready");
+        } else if (Date.now() - readyHoldStartedAtRef.current >= AUTO_CAPTURE_HOLD_MS) {
+          setAlignmentStatus("ready");
+          triggerCaptureRef.current();
+        }
       }
-    }, 350);
+    }, 450);
   }, [stopAnalysis, getVideo]);
 
   const handleUserMedia = useCallback(() => {
     setIsStarting(false);
     setError(null);
+    streamReadyAtRef.current = Date.now();
     setStreamReady(true);
     startAnalysisLoop();
   }, [startAnalysisLoop]);
@@ -466,7 +488,7 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
                     Only the framed area is captured
                   </p>
                   <p className="mb-5 text-center text-xs text-white/55">
-                    Auto-captures when a card is detected · or tap below
+                    Auto-captures when a card is steady in frame · or tap the button below
                   </p>
                   {isMobileDevice() && (
                     <p className="mb-4 text-center text-xs text-cyan-200/80">
