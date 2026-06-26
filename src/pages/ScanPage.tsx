@@ -444,12 +444,8 @@ export function ScanPage() {
             {preview ? (
               <img src={preview} alt="Scanning preview" className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${isProcessing ? 'opacity-50' : 'opacity-80'}`} />
             ) : (
-              <div className="absolute inset-6 flex flex-col justify-between text-white opacity-40">
-                <div>
-                  <div className="font-display text-base font-semibold">Sample Contact</div>
-                  <div className="text-[11px] opacity-70">Job Title · Company</div>
-                </div>
-              </div>
+             <>
+             </>
             )}
 
             {/* corner brackets */}

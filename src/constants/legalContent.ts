@@ -6,11 +6,12 @@ export const LEGAL_PAGE_URLS = {
   terms: "/terms-and-conditions.html",
 } as const;
 
-export const LEGAL_CONTACT_EMAIL = "yogeshvanaparthi@gmail.com";
-export const LEGAL_CONTACT_PHONE = "+91 98849 93074";
-export const LEGAL_CONTACT_PHONE_TEL = "+919884993074";
+export const LEGAL_CONTACT_NAME = "Ullavi";
+export const LEGAL_CONTACT_EMAIL = "supportulavi@gmail.com";
+export const LEGAL_CONTACT_PHONE = "+91 8838747273";
+export const LEGAL_CONTACT_PHONE_TEL = "+91 88387 47273";
 
-export const LEGAL_CONTACT_LINE = `${LEGAL_CONTACT_EMAIL} · ${LEGAL_CONTACT_PHONE}`;
+export const LEGAL_CONTACT_LINE = LEGAL_CONTACT_EMAIL;
 
 export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
   {

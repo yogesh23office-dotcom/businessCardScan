@@ -32,11 +32,40 @@ const GENERIC_EMAIL_DOMAINS = new Set([
 const UI_GARBAGE_REGEX =
   /\b(?:remove|retake|discard|save lead|use camera|position your card|opening camera|switch to|back camera|front camera)\b/i;
 
-const normalizeLine = (line: string): string =>
-  line.replace(/[\u200B-\u200D\uFEFF]/g, "").replace(/\s+/g, " ").trim();
+/** OCR noise symbols that should not appear in extracted contact fields. */
+const OCR_JUNK_SYMBOL = /[|&;:)\]\[({"'\\<>~`^*]/g;
+const OCR_JUNK_ONLY = /^[\s|&;:)\]\[({"'\\<>~`^*]+$/;
+
+/** Strip junk OCR symbols from a text field while keeping readable words. */
+function stripOcrJunkSymbols(value: string): string {
+  const tokens = value
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .split(/\s+/)
+    .map((token) => token.replace(OCR_JUNK_SYMBOL, "").trim())
+    .filter(Boolean);
+
+  return tokens.join(" ").replace(/\s+/g, " ").trim();
+}
+
+function sanitizeEmail(value: string): string {
+  return value.replace(/[|&;:)\]\[({"'\\<>~`^*]+$/g, "").trim();
+}
+
+function sanitizePhone(value: string): string {
+  return value.replace(/^[|&;:)\]\[({"'\\<>~`^*|]+|[|&;:)\]\[({"'\\<>~`^*|]+$/g, "").trim();
+}
+
+function sanitizeUrl(value: string): string {
+  return value.replace(/[|&;:)\]\[({"'\\<>~`^*]+$/g, "").trim();
+}
+
+const normalizeLine = (line: string): string => stripOcrJunkSymbols(line);
 
 const uniqueItems = (items: string[]): string[] =>
   [...new Set(items.map((value) => value.trim()).filter(Boolean))];
+
+const sanitizeList = (items: string[], sanitizer: (value: string) => string): string[] =>
+  uniqueItems(items.map(sanitizer).filter(Boolean));
 
 const cleanLines = (rawText: string): string[] =>
   rawText
@@ -50,6 +79,7 @@ const isGarbageLine = (line: string): boolean => {
   if (!trimmed || trimmed.length < 2) return true;
   if (UI_GARBAGE_REGEX.test(trimmed)) return true;
   if (/^[\W_]{2,}$/.test(trimmed)) return true;
+  if (OCR_JUNK_ONLY.test(trimmed)) return true;
   if (/^\|[\s@|]/.test(trimmed)) return true;
   if (/@\s*remo/i.test(trimmed)) return true;
   if ((trimmed.match(/[a-zA-Z0-9]/g)?.length ?? 0) < 2) return true;
@@ -310,27 +340,37 @@ export function parseOcrText(rawText: string): ScanContact {
     "";
   const { firstName, lastName } = inferNames(fullName);
 
+  const cleanEmails = sanitizeList(emails, sanitizeEmail);
+  const cleanPhones = sanitizeList(phonesResult.phones, sanitizePhone);
+  const cleanWebsites = sanitizeList(websites, sanitizeUrl);
+  const cleanAddresses = sanitizeList(addressResult.addresses, stripOcrJunkSymbols);
+  const cleanSocial = sanitizeList(socialLinks, sanitizeUrl);
+  const cleanFullName = stripOcrJunkSymbols(fullName);
+  const cleanDesignation = stripOcrJunkSymbols(designation);
+  const cleanCompany = stripOcrJunkSymbols(companyName);
+  const { firstName: cleanFirst, lastName: cleanLast } = inferNames(cleanFullName);
+
   return {
-    fullName: fullName.trim(),
-    firstName,
-    lastName,
-    designation: designation.trim(),
-    company: companyName,
-    companyName,
-    phone: phonesResult.phones[0] || "",
-    secondaryPhone: phonesResult.phones[1] || "",
-    phones: phonesResult.phones,
-    email: emails[0] || "",
-    secondaryEmail: emails[1] || "",
-    emails,
-    website: websites[0] || "",
-    secondaryWebsite: websites[1] || "",
-    websites,
-    address: addressResult.addresses[0] || "",
-    secondaryAddress: addressResult.addresses[1] || "",
-    addresses: addressResult.addresses,
-    socialLinks: socialLinks.join(", "),
-    socialLinksList: socialLinks,
+    fullName: cleanFullName,
+    firstName: cleanFirst,
+    lastName: cleanLast,
+    designation: cleanDesignation,
+    company: cleanCompany,
+    companyName: cleanCompany,
+    phone: cleanPhones[0] || "",
+    secondaryPhone: cleanPhones[1] || "",
+    phones: cleanPhones,
+    email: cleanEmails[0] || "",
+    secondaryEmail: cleanEmails[1] || "",
+    emails: cleanEmails,
+    website: cleanWebsites[0] || "",
+    secondaryWebsite: cleanWebsites[1] || "",
+    websites: cleanWebsites,
+    address: cleanAddresses[0] || "",
+    secondaryAddress: cleanAddresses[1] || "",
+    addresses: cleanAddresses,
+    socialLinks: cleanSocial.join(", "),
+    socialLinksList: cleanSocial,
     notes: "",
     confidence: {},
   };

@@ -4,7 +4,7 @@ import { AuthCredentialsForm } from "@/components/auth/AuthCredentialsForm";
 import { ForgotPasswordForm } from "@/components/auth/ForgotPasswordForm";
 import { AuthScannerPanel } from "@/components/auth/AuthScannerPanel";
 import { NeuralVortexBackground } from "@/components/ui/interactive-neural-vortex-background";
-import { LEGAL_CONTACT_EMAIL, LEGAL_CONTACT_PHONE, LEGAL_CONTACT_PHONE_TEL, LEGAL_PAGE_URLS } from "@/constants/legalContent";
+import { LEGAL_CONTACT_EMAIL, LEGAL_CONTACT_PHONE, LEGAL_PAGE_URLS } from "@/constants/legalContent";
 import { neonAuthConfigIssue } from "@/lib/authConfig";
 import { checkNeonAuthHealth } from "@/lib/authHealth";
 import { useForceLightMode } from "@/hooks/useForceLightMode";
@@ -54,13 +54,13 @@ export function AuthPage({ pathname }: { pathname: string }) {
               href={`mailto:${LEGAL_CONTACT_EMAIL}`}
               className="block font-medium text-primary transition-colors hover:text-primary/80"
             >
-              {LEGAL_CONTACT_EMAIL}
+             {LEGAL_CONTACT_EMAIL}
             </a>
             <a
-              href={`tel:${LEGAL_CONTACT_PHONE_TEL}`}
-              className="block text-muted-foreground transition-colors hover:text-primary"
+              href={`tel:${LEGAL_CONTACT_PHONE}`}
+              className="block font-medium text-primary transition-colors hover:text-primary/80"
             >
-              {LEGAL_CONTACT_PHONE}
+             {LEGAL_CONTACT_PHONE}
             </a>
           </div>
         </header>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { authClient } from "@/auth";
 import {
   DEFAULT_USER_SETTINGS,
   getUserFirstName,
@@ -9,6 +10,7 @@ import {
 
 export function useUserSettings() {
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_USER_SETTINGS);
+  const { data: authSession } = authClient.useSession();
 
   useEffect(() => {
     setSettings(loadUserSettings());
@@ -24,14 +26,22 @@ export function useUserSettings() {
     };
   }, []);
 
+  const authEmail = authSession?.user?.email?.trim();
+  const authName = authSession?.user?.name?.trim();
+  const merged = {
+    ...settings,
+    ...(authEmail ? { email: authEmail } : {}),
+    ...(authName ? { fullName: authName } : {}),
+  };
+
   return {
-    settings,
-    fullName: settings.fullName,
-    email: settings.email,
-    phone: settings.phone,
-    company: settings.company,
-    role: settings.role,
-    initials: getUserInitials(settings.fullName),
-    firstName: getUserFirstName(settings.fullName),
+    settings: merged,
+    fullName: merged.fullName,
+    email: merged.email,
+    phone: merged.phone,
+    company: merged.company,
+    role: merged.role,
+    initials: getUserInitials(merged.fullName || authEmail || "User"),
+    firstName: getUserFirstName(merged.fullName || authName || "User"),
   };
 }

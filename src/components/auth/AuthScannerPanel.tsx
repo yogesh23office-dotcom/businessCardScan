@@ -31,12 +31,7 @@ export function AuthScannerPanel() {
         </div>
 
         <div className="relative aspect-[1.6/1] overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-slate-900 to-[#0f172a]">
-          <div className="absolute inset-5 flex flex-col justify-between text-white/55">
-            <div>
-              <div className="font-display text-sm font-semibold text-white/80">Sample Contact</div>
-              <div className="text-[10px]">Job Title · Company</div>
-            </div>
-          </div>
+         
 
           {[
             "top-2 left-2 border-l-2 border-t-2",

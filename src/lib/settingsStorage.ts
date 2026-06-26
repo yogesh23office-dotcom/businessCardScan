@@ -42,9 +42,9 @@ export const TIMEZONE_OPTIONS = [
 ] as const;
 
 export const DEFAULT_USER_SETTINGS: UserSettings = {
-  fullName: "Yogesh VR",
-  email: "yogeshvanaparthi@gmail.com",
-  phone: "+91 98849 93074",
+  fullName: "",
+  email: "",
+  phone: "",
   company: "CardSync AI",
   role: "Workspace owner",
   timezone: "India Standard Time",
@@ -71,15 +71,6 @@ export function loadUserSettings(): UserSettings {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_USER_SETTINGS };
     const parsed = JSON.parse(raw) as Partial<UserSettings>;
-    if (
-      parsed.fullName?.trim() === "Alex Kim" ||
-      parsed.email?.trim().toLowerCase() === "alex@cardsync.ai" ||
-      parsed.email?.trim().toLowerCase() === "yogi2324@gmail.com"
-    ) {
-      parsed.fullName = DEFAULT_USER_SETTINGS.fullName;
-      parsed.email = DEFAULT_USER_SETTINGS.email;
-      parsed.phone = DEFAULT_USER_SETTINGS.phone;
-    }
     const autoSyncToZohoWhenOnline =
       parsed.autoSyncToZohoWhenOnline ??
       parsed.autoSyncQueueWhenOnline ??
@@ -141,5 +132,5 @@ export function getUserInitials(fullName: string): string {
 
 export function getUserFirstName(fullName: string): string {
   const first = fullName.trim().split(/\s+/).filter(Boolean)[0];
-  return first || DEFAULT_USER_SETTINGS.fullName.split(/\s+/)[0] || "User";
+  return first || "User";
 }

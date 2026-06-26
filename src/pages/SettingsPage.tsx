@@ -27,6 +27,8 @@ import {
 } from "@/constants/legalContent";
 import { LegalDocumentModal } from "@/components/legal/LegalDocumentModal";
 import { toast } from "sonner";
+import { authClient } from "@/auth";
+import { syncProfileFromAuthUser } from "@/lib/authProfileSync";
 import { useConfirmModal } from "@/components/ui/confirm-modal";
 import { hasCookieConsent, saveCookieConsent } from "@/lib/cookieConsent";
 import {
@@ -77,6 +79,7 @@ function SettingRow({
 
 export function SettingsPage() {
   const { confirm } = useConfirmModal();
+  const { data: authSession } = authClient.useSession();
   const [profile, setProfile] = useState<UserSettings>(DEFAULT_USER_SETTINGS);
   const [isSaving, setIsSaving] = useState(false);
   const [isWiping, setIsWiping] = useState(false);
@@ -86,16 +89,26 @@ export function SettingsPage() {
   const initials = useMemo(() => getUserInitials(profile.fullName), [profile.fullName]);
 
   useEffect(() => {
+    if (authSession?.user) {
+      syncProfileFromAuthUser(authSession.user);
+    }
     const loaded = loadUserSettings();
+    const authEmail = authSession?.user?.email?.trim();
+    const authName = authSession?.user?.name?.trim();
+    const mergedProfile = {
+      ...loaded,
+      ...(authEmail ? { email: authEmail } : {}),
+      ...(authName ? { fullName: authName } : {}),
+    };
     const consent = hasCookieConsent();
     setProfile(
       consent
-        ? { ...loaded, cookiesAccepted: true }
-        : loaded,
+        ? { ...mergedProfile, cookiesAccepted: true }
+        : mergedProfile,
     );
     document.documentElement.classList.remove("dark");
     localStorage.removeItem("cs-dark");
-  }, []);
+  }, [authSession?.user?.email, authSession?.user?.name]);
 
   const updateProfileField = <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => {
     setProfile((prev) => ({ ...prev, [key]: value }));
@@ -130,15 +143,19 @@ export function SettingsPage() {
     const ok = await confirm({
       title: "Clear offline queue?",
       description:
-        "Clear the offline sync queue on this device? Contacts already saved elsewhere are not removed.",
+        "Remove only your offline sync queue on this device. Other users' queued contacts are not affected.",
       confirmLabel: "Clear queue",
       destructive: true,
     });
     if (!ok) return;
     setIsClearingQueue(true);
     try {
-      await clearLocalQueueOnly();
-      toast.success("Offline queue cleared on this device.");
+      const removed = await clearLocalQueueOnly();
+      toast.success(
+        removed > 0
+          ? `Cleared ${removed} queued contact${removed === 1 ? "" : "s"} from your queue.`
+          : "Your offline queue is already empty.",
+      );
     } catch {
       toast.error("Failed to clear queue.");
     } finally {
@@ -148,17 +165,22 @@ export function SettingsPage() {
 
   const handleWipeAll = async () => {
     const ok = await confirm({
-      title: "Delete all data?",
+      title: "Delete your data?",
       description:
-        "Delete ALL contacts and queue data on this device?\n\nThis cannot be undone.",
-      confirmLabel: "Delete all",
+        "Remove your contacts, queue, and outreach status on this device. Zoho records are marked deleted (not permanently removed) and only for your account.",
+      confirmLabel: "Delete my data",
       destructive: true,
     });
     if (!ok) return;
     setIsWiping(true);
     try {
-      await wipeAllAppData();
-      toast.success("All contacts and queue data cleared on this device.");
+      const result = await wipeAllAppData();
+      const browser = result.browser;
+      toast.success(
+        browser
+          ? `Your data cleared (${browser.contactsRemoved} device contact${browser.contactsRemoved === 1 ? "" : "s"}, ${browser.queueRemoved} queue item${browser.queueRemoved === 1 ? "" : "s"}).`
+          : "Your data cleared on this device.",
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Wipe failed.");
     } finally {

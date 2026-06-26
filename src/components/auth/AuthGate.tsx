@@ -3,6 +3,7 @@ import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
 
 import { authClient } from "@/auth";
+import { syncProfileFromAuthUser } from "@/lib/authProfileSync";
 
 function resolvePostAuthPath(): string {
   if (typeof window === "undefined") return "/scan";
@@ -19,6 +20,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const searchStr = useRouterState({ select: (state) => state.location.searchStr });
   const { data: session, isPending } = authClient.useSession();
+
+  useEffect(() => {
+    if (session?.user) {
+      syncProfileFromAuthUser(session.user);
+    }
+  }, [session?.user?.email, session?.user?.name]);
 
   useEffect(() => {
     if (isPending || session?.user) return;

@@ -1,18 +1,23 @@
 import { API_BASE_URL } from "@/lib/api";
 import { apiFetch } from "@/lib/apiFetch";
-import { clearAllBrowserData, clearSyncQueue } from "@/lib/indexeddb";
+import { getCurrentAppUser } from "@/lib/currentAppUser";
+import { clearUserBrowserData } from "@/lib/indexeddb";
+import { clearOutreachStatusForUser } from "@/lib/outreachStatusStorage";
+import { invalidateContactsDirectory } from "@/lib/contactsDirectory";
 
 export type WipeResult = {
   zoho?: unknown;
   contacts?: { deleted?: number; error?: string; note?: string };
-  browser?: { cleared: true };
+  browser?: { queueRemoved: number; contactsRemoved: number };
+  scopedToUser?: boolean;
 };
 
 export async function wipeAllAppData(options?: {
   includeZoho?: boolean;
 }): Promise<WipeResult> {
   const includeZoho = options?.includeZoho !== false;
-  const result: WipeResult = {};
+  const appUser = await getCurrentAppUser();
+  const result: WipeResult = { scopedToUser: Boolean(appUser) };
 
   const backendRes = await apiFetch(`${API_BASE_URL}/admin/wipe-all-data`, {
     method: "POST",
@@ -32,10 +37,13 @@ export async function wipeAllAppData(options?: {
   const backendJson = await backendRes.json();
   result.zoho = backendJson.zoho;
   result.contacts = backendJson.contacts;
+  result.scopedToUser = Boolean(backendJson.scoped_to_user ?? appUser);
 
-  await clearAllBrowserData();
-  result.browser = { cleared: true };
+  const browser = await clearUserBrowserData(appUser);
+  clearOutreachStatusForUser(appUser);
+  result.browser = browser;
 
+  invalidateContactsDirectory();
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("cs-contacts-updated"));
     window.dispatchEvent(new CustomEvent("cs-queue-updated"));
@@ -44,9 +52,13 @@ export async function wipeAllAppData(options?: {
   return result;
 }
 
-export async function clearLocalQueueOnly(): Promise<void> {
-  await clearSyncQueue();
+export async function clearLocalQueueOnly(): Promise<number> {
+  const appUser = await getCurrentAppUser();
+  const { clearUserSyncQueue } = await import("@/lib/indexeddb");
+  const removed = await clearUserSyncQueue(appUser);
+  invalidateContactsDirectory();
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("cs-queue-updated"));
   }
+  return removed;
 }

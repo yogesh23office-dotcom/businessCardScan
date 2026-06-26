@@ -1,6 +1,6 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Search, Filter, RefreshCw, Mail, MessageCircle, Plus, Trash2, Send, Loader2 } from "lucide-react";
+import { Search, Filter, RefreshCw, Plus, Trash2, Send, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,7 @@ import {
   syncQueueItemToZoho,
 } from "@/lib/contactStorage";
 import { useContactsDirectory } from "@/hooks/useContactsDirectory";
+import { useUserSettings } from "@/hooks/useUserSettings";
 import { getConnectionMode } from "@/lib/connectionMode";
 import { deleteDirectoryContact } from "@/lib/deleteDirectoryContact";
 import { contactRowKey, type DirectoryContact } from "@/lib/contactsDirectory";
@@ -33,6 +34,7 @@ import { loadEvents } from "@/lib/eventStorage";
 import type { ContactStatus } from "@/lib/contactStatus";
 import { Route as ContactsRoute } from "@/routes/contacts";
 import { cn } from "@/lib/utils";
+import { ContactChannelIcons } from "@/components/contacts/ContactChannelIcons";
 
 function isLocalStorageSource(source: Contact["source"]): boolean {
   return source === "localdb" || source === "indexeddb";
@@ -62,6 +64,16 @@ export function ContactsPage() {
   };
   const { contacts: contactsList, isLoading, isRefreshing, refresh, removeContact } =
     useContactsDirectory();
+  const { settings: userSettings } = useUserSettings();
+  const showWhatsAppTemplateStatus = userSettings.whatsappNotificationsEnabled;
+  const showEmailTemplateStatus = userSettings.emailNotificationsEnabled;
+  const showTemplateStatusColumn = showWhatsAppTemplateStatus || showEmailTemplateStatus;
+  const templateColumnLabel = [
+    showWhatsAppTemplateStatus ? "WhatsApp" : null,
+    showEmailTemplateStatus ? "Email" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const showInitialLoading = isLoading && contactsList.length === 0;
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"all" | ContactStatus>("all");
@@ -183,8 +195,8 @@ export function ContactsPage() {
       title: "Delete contact?",
       description:
         contact.source === "zoho"
-          ? "Remove this lead from Zoho CRM? This cannot be undone."
-          : "Are you sure you want to delete this contact? This cannot be undone.",
+          ? "Hide this lead from your list? The record stays in Zoho (soft delete) for audit and recovery."
+          : "Remove this contact from your device?",
       confirmLabel: "Delete",
       destructive: true,
     });
@@ -194,11 +206,11 @@ export function ContactsPage() {
       await deleteDirectoryContact(contact);
       removeContact(contact);
       if (contact.source === "zoho") {
-        toast.success("Contact deleted from Zoho CRM.");
+        toast.success("Contact hidden (marked deleted in Zoho).");
       } else if (contact.source === "queue") {
-        toast.success("Queued contact removed.");
+        toast.success("Queued contact removed from your queue.");
       } else {
-        toast.success("Contact deleted.");
+        toast.success("Contact removed from your device.");
       }
       void reloadContacts({ force: true, silent: true });
     } catch (err: unknown) {
@@ -437,7 +449,9 @@ export function ContactsPage() {
                     <th className="px-4 py-3 font-medium">Contact</th>
                     <th className="px-4 py-3 font-medium">Event</th>
                     <th className="px-4 py-3 font-medium">Title</th>
-                    <th className="px-4 py-3 font-medium">Channels</th>
+                    {showTemplateStatusColumn ? (
+                      <th className="px-4 py-3 font-medium">{templateColumnLabel}</th>
+                    ) : null}
                     <th className="px-4 py-3 font-medium">Status</th>
                     <th className="px-4 py-3 font-medium">Last sync</th>
                     <th className="px-4 py-3 font-medium text-right">Actions</th>
@@ -473,20 +487,18 @@ export function ContactsPage() {
                         {c.eventName || "—"}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">{c.title}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5">
-                          {c.channels?.whatsapp && (
-                            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-success/10 text-success">
-                              <MessageCircle className="h-3 w-3" />
-                            </span>
-                          )}
-                          {c.channels?.email && (
-                            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-primary">
-                              <Mail className="h-3 w-3" />
-                            </span>
-                          )}
-                        </div>
-                      </td>
+                      {showTemplateStatusColumn ? (
+                        <td className="px-4 py-3">
+                          <ContactChannelIcons
+                            phone={c.phone}
+                            email={c.email}
+                            whatsappDelivery={c.whatsappDelivery}
+                            emailDelivery={c.emailDelivery}
+                            showWhatsApp={showWhatsAppTemplateStatus}
+                            showEmail={showEmailTemplateStatus}
+                          />
+                        </td>
+                      ) : null}
                       <td className="px-4 py-3"><StatusPill status={c.status} /></td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">{c.lastSync}</td>
                       <td className="px-4 py-3 text-right">
@@ -585,25 +597,31 @@ export function ContactsPage() {
 
                   <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/40 pt-3">
                     <StatusPill status={c.status} />
-                    {c.channels?.whatsapp && (
-                      <span className="inline-flex items-center gap-1 rounded-md bg-success/10 px-2 py-0.5 text-[10px] text-success">
-                        <MessageCircle className="h-3 w-3" /> WhatsApp
-                      </span>
-                    )}
-                    {c.channels?.email && c.email && (
-                      <a
-                        href={`mailto:${c.email}`}
-                        className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-0.5 text-[10px] text-primary"
-                      >
-                        <Mail className="h-3 w-3" /> Email
-                      </a>
-                    )}
+                    {showTemplateStatusColumn ? (
+                      <ContactChannelIcons
+                        phone={c.phone}
+                        email={c.email}
+                        whatsappDelivery={c.whatsappDelivery}
+                        emailDelivery={c.emailDelivery}
+                        compact
+                        showWhatsApp={showWhatsAppTemplateStatus}
+                        showEmail={showEmailTemplateStatus}
+                      />
+                    ) : null}
                     {c.phone && (
                       <a
                         href={`tel:${c.phone}`}
                         className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[10px] text-muted-foreground"
                       >
                         {c.phone}
+                      </a>
+                    )}
+                    {c.email && (
+                      <a
+                        href={`mailto:${c.email}`}
+                        className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[10px] text-muted-foreground"
+                      >
+                        {c.email}
                       </a>
                     )}
                   </div>

@@ -6,6 +6,7 @@ import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { authClient } from "@/auth";
 import { isAuthEnabled } from "@/lib/authConfig";
 import { clearAuthTokenCache } from "@/lib/authSession";
+import { invalidateContactsDirectory } from "@/lib/contactsDirectory";
 import { getQueueItems } from "@/lib/indexeddb";
 import { seedOfflineSampleContact } from "@/lib/contactStorage";
 import { isIndexedDbStorage } from "@/lib/storageConfig";
@@ -39,16 +40,17 @@ export function TopBar() {
     profileName ||
     authSession?.user?.name?.trim() ||
     authSession?.user?.email?.trim() ||
-    "Yogesh VR";
+    "Account";
 
   const avatarInitials =
     profileInitials ||
     authSession?.user?.name?.trim()?.slice(0, 2).toUpperCase() ||
     authSession?.user?.email?.trim()?.slice(0, 2).toUpperCase() ||
-    "YV";
+    "??";
 
   const handleSignOut = async () => {
     clearAuthTokenCache();
+    invalidateContactsDirectory();
     if (isAuthEnabled) {
       await authClient.signOut();
       navigate({ to: "/auth/$pathname", params: { pathname: "sign-in" } });

@@ -6,6 +6,12 @@ import { listContacts, storageLabel } from "@/lib/contactStorage";
 import { resolveEventNameForContact } from "@/lib/eventStorage";
 import { getQueueItems } from "@/lib/indexeddb";
 import type { ContactStatus } from "@/lib/contactStatus";
+import { contactBelongsToAppUser, getCurrentAppUser } from "@/lib/currentAppUser";
+import {
+  getOutreachStatusForContactSync,
+  type OutreachDeliveryRecord,
+} from "@/lib/outreachStatusStorage";
+import { getCurrentAppUserSync } from "@/lib/currentAppUser";
 
 export type DirectoryContact = {
   id: string;
@@ -21,6 +27,8 @@ export type DirectoryContact = {
   source: "zoho" | "queue" | "localdb" | "indexeddb";
   zohoLeadId?: string | null;
   channels: { whatsapp: boolean; email: boolean };
+  emailDelivery?: OutreachDeliveryRecord;
+  whatsappDelivery?: OutreachDeliveryRecord;
   lastSync: string;
   accent: string;
 };
@@ -33,6 +41,25 @@ const ACCENTS = [
   "from-fuchsia-500 to-pink-500",
   "from-cyan-500 to-blue-500",
 ];
+
+function attachOutreachStatus<T extends Pick<DirectoryContact, "zohoLeadId" | "email" | "phone" | "name">>(
+  contact: T,
+): T & Pick<DirectoryContact, "emailDelivery" | "whatsappDelivery"> {
+  const outreach = getOutreachStatusForContactSync(
+    {
+      zohoLeadId: contact.zohoLeadId,
+      email: contact.email,
+      phone: contact.phone,
+      name: contact.name,
+    },
+    getCurrentAppUserSync(),
+  );
+  return {
+    ...contact,
+    emailDelivery: outreach.emailDelivery,
+    whatsappDelivery: outreach.whatsappDelivery,
+  };
+}
 
 function isAppOnline(): boolean {
   return (
@@ -110,15 +137,16 @@ async function fetchContactsDirectoryFromSources(): Promise<ContactsDirectorySna
   let fetchFailed = false;
   const useBrowserStorage = true;
   const onlineView = isAppOnline();
+  const appUser = await getCurrentAppUser();
 
   try {
     const allLocal = (await listContacts()) as Record<string, unknown>[];
-    // Online: only show device rows still pending sync; synced rows live in Zoho.
     localDbData = onlineView
       ? allLocal.filter(
           (c) => c.syncStatus !== "synced_zoho" && !c.zohoLeadId,
         )
       : allLocal;
+    localDbData = localDbData.filter((c) => contactBelongsToAppUser(c, appUser));
   } catch (localErr) {
     console.warn("Failed to list contacts:", localErr);
   }
@@ -149,7 +177,7 @@ async function fetchContactsDirectoryFromSources(): Promise<ContactsDirectorySna
           .join("")
           .toUpperCase()
       : "";
-    return {
+    return attachOutreachStatus({
       id: String(c.id || `zoho-${i}`),
       zohoLeadId: c.id ? String(c.id) : null,
       name,
@@ -173,14 +201,16 @@ async function fetchContactsDirectoryFromSources(): Promise<ContactsDirectorySna
         email: !!c.email,
       },
       lastSync: String(c.lastSync || "Synced to Zoho"),
-    };
+    });
   });
 
   let formattedQueue: DirectoryContact[] = [];
   if (useBrowserStorage) {
     try {
       const queueItems = await getQueueItems();
-      formattedQueue = queueItems.map((item) => {
+      formattedQueue = queueItems
+        .filter((item) => contactBelongsToAppUser(item, appUser))
+        .map((item) => {
         const c = item.contact_data;
         const name = c.name || "Unnamed Contact";
         const initials = name
@@ -192,7 +222,7 @@ async function fetchContactsDirectoryFromSources(): Promise<ContactsDirectorySna
               .toUpperCase()
           : "?";
 
-        return {
+        return attachOutreachStatus({
           id: item.id,
           source: "queue" as const,
           name,
@@ -215,7 +245,7 @@ async function fetchContactsDirectoryFromSources(): Promise<ContactsDirectorySna
           lastSync:
             item.status === "failed" ? "Sync failed" : "Queued · save on device",
           accent: "from-amber-500 to-orange-500",
-        };
+        });
       });
     } catch (dbErr) {
       console.error("Failed to read IndexedDB queue in contacts list:", dbErr);
@@ -253,7 +283,7 @@ async function fetchContactsDirectoryFromSources(): Promise<ContactsDirectorySna
           : c.syncStatus === "failed"
             ? ("failed" as ContactStatus)
             : ("pending" as ContactStatus);
-      return {
+      return attachOutreachStatus({
         id: String(c.id || `local-${i}`),
         name,
         company: String(c.company || ""),
@@ -286,7 +316,7 @@ async function fetchContactsDirectoryFromSources(): Promise<ContactsDirectorySna
                 ? "Awaiting save"
                 : `${storageLabel()} · pending`
               : String(c.lastSync || storageLabel({ online: onlineView })),
-      };
+      });
     });
 
   return {

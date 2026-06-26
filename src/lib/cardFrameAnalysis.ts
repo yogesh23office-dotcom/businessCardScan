@@ -50,22 +50,80 @@ export function measureFrameSharpness(
   return sumSq / count - mean * mean;
 }
 
-/** Apply OCR preprocessing: grayscale → contrast enhancement → deskew hint. */
+/** Otsu threshold for binarizing card text (improves Tesseract on glossy cards). */
+function otsuThreshold(histogram: Uint32Array, totalPixels: number): number {
+  let sum = 0;
+  for (let i = 0; i < 256; i++) sum += i * histogram[i];
+
+  let sumB = 0;
+  let weightB = 0;
+  let maxVariance = 0;
+  let threshold = 128;
+
+  for (let t = 0; t < 256; t++) {
+    weightB += histogram[t];
+    if (weightB === 0) continue;
+    const weightF = totalPixels - weightB;
+    if (weightF === 0) break;
+
+    sumB += t * histogram[t];
+    const meanB = sumB / weightB;
+    const meanF = (sum - sumB) / weightF;
+    const variance = weightB * weightF * (meanB - meanF) ** 2;
+    if (variance > maxVariance) {
+      maxVariance = variance;
+      threshold = t;
+    }
+  }
+  return threshold;
+}
+
+/** Apply OCR preprocessing: grayscale → contrast → Otsu binarization → light sharpen. */
 export function preprocessForOCR(canvas: HTMLCanvasElement): ImageData {
   const ctx = canvas.getContext("2d");
   if (!ctx) return ctx!.createImageData(canvas.width, canvas.height);
 
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const { width, height } = canvas;
+  const imageData = ctx.getImageData(0, 0, width, height);
   const data = imageData.data;
+  const pixelCount = width * height;
+  const gray = new Uint8Array(pixelCount);
+  const histogram = new Uint32Array(256);
 
-  // Grayscale + contrast enhancement
-  for (let i = 0; i < data.length; i += 4) {
-    const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-    // Stretch contrast: increase diff from 128 (midpoint)
-    const enhanced = Math.min(255, Math.max(0, (gray - 128) * 1.3 + 128));
-    data[i] = enhanced;
-    data[i + 1] = enhanced;
-    data[i + 2] = enhanced;
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+    const value = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+    gray[p] = value;
+    histogram[value]++;
+  }
+
+  const threshold = otsuThreshold(histogram, pixelCount);
+
+  for (let p = 0; p < pixelCount; p++) {
+    const enhanced = Math.min(255, Math.max(0, (gray[p] - 128) * 1.45 + 128));
+    const binary = enhanced > threshold ? 255 : 0;
+    const o = p * 4;
+    data[o] = binary;
+    data[o + 1] = binary;
+    data[o + 2] = binary;
+  }
+
+  // Unsharp mask on binarized image — crispens letter edges for Tesseract.
+  const copy = new Uint8ClampedArray(data);
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const idx = (y * width + x) * 4;
+      const center = copy[idx];
+      const neighbors =
+        (copy[idx - 4] +
+          copy[idx + 4] +
+          copy[idx - width * 4] +
+          copy[idx + width * 4]) /
+        4;
+      const sharpened = Math.min(255, Math.max(0, center + (center - neighbors) * 0.35));
+      data[idx] = sharpened;
+      data[idx + 1] = sharpened;
+      data[idx + 2] = sharpened;
+    }
   }
 
   ctx.putImageData(imageData, 0, 0);

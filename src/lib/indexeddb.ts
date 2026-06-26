@@ -1,4 +1,6 @@
 import { openDB, IDBPDatabase } from "idb";
+import type { AppUserIdentity } from "@/lib/currentAppUser";
+import { contactBelongsToAppUser } from "@/lib/currentAppUser";
 
 export interface QueueItem {
   id: string;
@@ -10,6 +12,8 @@ export interface QueueItem {
   error_message?: string;
   /** Base64 data URL of the business card image for local DB sync */
   image_base64?: string;
+  capturedByEmail?: string;
+  capturedByUserId?: string;
 }
 
 const DB_NAME = "cardsync-db";
@@ -94,6 +98,37 @@ export async function clearContactsCache(): Promise<void> {
   await db.clear(CONTACTS_CACHE_STORE);
 }
 
+export async function clearUserSyncQueue(appUser: AppUserIdentity | null): Promise<number> {
+  const items = await getQueueItems();
+  let removed = 0;
+  for (const item of items) {
+    if (!contactBelongsToAppUser(item, appUser)) continue;
+    await removeQueueItem(item.id);
+    removed += 1;
+  }
+  return removed;
+}
+
+export async function clearUserContactsCache(appUser: AppUserIdentity | null): Promise<number> {
+  const contacts = await getCachedContacts();
+  let removed = 0;
+  for (const contact of contacts) {
+    if (!contactBelongsToAppUser(contact, appUser)) continue;
+    await removeCachedContact(String(contact.id || ""));
+    removed += 1;
+  }
+  return removed;
+}
+
+export async function clearUserBrowserData(appUser: AppUserIdentity | null): Promise<{
+  queueRemoved: number;
+  contactsRemoved: number;
+}> {
+  const queueRemoved = await clearUserSyncQueue(appUser);
+  const contactsRemoved = await clearUserContactsCache(appUser);
+  return { queueRemoved, contactsRemoved };
+}
+
 export async function clearAllBrowserData(): Promise<void> {
   await clearSyncQueue();
   await clearContactsCache();
@@ -158,6 +193,10 @@ function contactRecordFromPayload(
       whatsapp: Boolean(payload.phone),
       email: Boolean(payload.email),
     },
+    capturedByEmail: String(payload.capturedByEmail || ""),
+    capturedByUserId: String(payload.capturedByUserId || ""),
+    capturedByPhone: String(payload.capturedByPhone || ""),
+    capturedByName: String(payload.capturedByName || ""),
   };
 }
 

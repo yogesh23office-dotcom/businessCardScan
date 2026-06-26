@@ -14,11 +14,15 @@ export type ZohoSyncResult = {
   alreadySynced?: boolean;
   success?: boolean;
   emailSent?: boolean;
+  emailAttempted?: boolean;
   emailError?: string | null;
   emailTo?: string | null;
   emailExtracted?: string | null;
   emailSkipped?: boolean;
+  emailCc?: string[];
+  emailCcInvalid?: Array<{ address: string; reason: string }>;
   whatsappSent?: boolean;
+  whatsappAttempted?: boolean;
   whatsappError?: string | null;
   whatsappTo?: string | null;
   whatsappMessageId?: string | null;
@@ -28,13 +32,20 @@ export type ZohoSyncResult = {
 
 function normalizeZohoSyncResult(data: Record<string, unknown>): ZohoSyncResult {
   const emailError = (data.email_error as string | null | undefined) ?? null;
-  const emailSent = Boolean(
-    data.email_sent ?? data.emailSent ?? (data.email_queued && !emailError),
-  );
+  const emailSent = data.email_sent === true || data.emailSent === true;
+  const emailAttempted =
+    data.email_attempted === true ||
+    data.emailAttempted === true ||
+    emailSent;
   const emailExtracted =
     (data.email_extracted as string | null | undefined) ??
     (data.email_to as string | null | undefined) ??
     null;
+  const whatsappSent = data.whatsapp_sent === true || data.whatsappSent === true;
+  const whatsappAttempted =
+    data.whatsapp_attempted === true ||
+    data.whatsappAttempted === true ||
+    whatsappSent;
 
   return {
     success: data.success === true,
@@ -43,11 +54,17 @@ function normalizeZohoSyncResult(data: Record<string, unknown>): ZohoSyncResult 
       (data.zoho_lead_id as string | undefined),
     alreadySynced: Boolean(data.alreadySynced ?? data.already_synced),
     emailSent,
+    emailAttempted,
     emailError,
     emailTo: (data.email_to as string | null | undefined) ?? null,
     emailExtracted,
     emailSkipped: Boolean(data.email_skipped ?? data.emailSkipped),
-    whatsappSent: Boolean(data.whatsapp_sent ?? data.whatsappSent),
+    emailCc: Array.isArray(data.email_cc) ? (data.email_cc as string[]) : [],
+    emailCcInvalid: Array.isArray(data.email_cc_invalid)
+      ? (data.email_cc_invalid as Array<{ address: string; reason: string }>)
+      : [],
+    whatsappSent,
+    whatsappAttempted,
     whatsappError: (data.whatsapp_error as string | null | undefined) ?? null,
     whatsappTo: (data.whatsapp_to as string | null | undefined) ?? null,
     whatsappMessageId:

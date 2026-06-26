@@ -26,6 +26,12 @@ import {
 import { recordContactEventLink } from "@/lib/eventStorage";
 import { getConnectionMode } from "@/lib/connectionMode";
 import { syncPayloadToZoho, seedOfflineSampleContact } from "@/lib/contactApi";
+import {
+  getCurrentAppUser,
+  stampCapturedByFields,
+  type AppUserIdentity,
+} from "@/lib/currentAppUser";
+import { recordOutreachFromSyncResult } from "@/lib/outreachStatusStorage";
 
 export type StoredContact = Awaited<ReturnType<typeof listStoredContacts>>[number];
 
@@ -82,10 +88,12 @@ type ZohoSaveFields = {
   alreadySynced?: boolean;
   zohoError?: string;
   emailSent?: boolean;
+  emailAttempted?: boolean;
   emailError?: string | null;
   emailTo?: string | null;
   emailExtracted?: string | null;
   whatsappSent?: boolean;
+  whatsappAttempted?: boolean;
   whatsappError?: string | null;
   whatsappTo?: string | null;
   whatsappMessageId?: string | null;
@@ -93,24 +101,48 @@ type ZohoSaveFields = {
   whatsappSendMode?: string | null;
 };
 
+async function persistOutreachStatus(
+  payload: LeadPayload,
+  zoho: {
+    zohoLeadId?: string;
+    emailSent?: boolean;
+    emailAttempted?: boolean;
+    emailError?: string | null;
+    emailSkipped?: boolean;
+    whatsappSent?: boolean;
+    whatsappAttempted?: boolean;
+    whatsappError?: string | null;
+  },
+): Promise<void> {
+  await recordOutreachFromSyncResult(
+    {
+      zohoLeadId: zoho.zohoLeadId,
+      email: pickPrimaryEmail(payload),
+      phone: payload.phone,
+      name: payload.fullName,
+    },
+    zoho,
+  );
+}
+
 async function saveOfflineToIndexedDbQueue(
   payload: LeadPayload,
   cardImageBase64?: string,
   errorMessage = "Saved offline — will sync to Zoho when online",
 ): Promise<{ id: string; queued: true }> {
-  const queueId = crypto.randomUUID();
   const email = pickPrimaryEmail(payload);
-  await addToQueue(
-    buildQueueItemFromPayload(
-      { ...payload, email },
-      cardImageBase64,
-      errorMessage,
-    ),
+  const appUser = await getCurrentAppUser();
+  const item = buildQueueItemFromPayload(
+    { ...payload, email },
+    cardImageBase64,
+    errorMessage,
+    appUser,
   );
+  await addToQueue(item);
   const { recordOfflineQueueCapture } = await import("@/lib/captureSourceAnalytics");
   recordOfflineQueueCapture();
   notifyContactsListChanged();
-  return { id: queueId, queued: true };
+  return { id: item.id, queued: true };
 }
 
 async function saveOnlineDirectToZoho(
@@ -141,6 +173,7 @@ async function saveOnlineDirectToZoho(
     }
     const { recordDirectZohoCapture } = await import("@/lib/captureSourceAnalytics");
     recordDirectZohoCapture();
+    await persistOutreachStatus(body, zoho);
     notifyContactsListChanged();
     return {
       id: zoho.zohoLeadId || crypto.randomUUID(),
@@ -148,10 +181,12 @@ async function saveOnlineDirectToZoho(
       zohoSynced: Boolean(zoho.zohoLeadId),
       alreadySynced: zoho.alreadySynced,
       emailSent: zoho.emailSent,
+      emailAttempted: zoho.emailAttempted,
       emailError: zoho.emailError,
       emailTo: zoho.emailTo,
       emailExtracted: zoho.emailExtracted || email || null,
       whatsappSent: zoho.whatsappSent,
+      whatsappAttempted: zoho.whatsappAttempted,
       whatsappError: zoho.whatsappError,
       whatsappTo: zoho.whatsappTo,
       whatsappMessageId: zoho.whatsappMessageId,
@@ -193,6 +228,7 @@ export async function syncQueueItemToZoho(
     });
   }
   await removeQueueItem(item.id);
+  await persistOutreachStatus(payload, result);
   const { recordQueueSyncedToZoho } = await import("@/lib/captureSourceAnalytics");
   recordQueueSyncedToZoho();
   notifyContactsListChanged();
@@ -342,6 +378,7 @@ export async function syncContactToZohoStorage(
     await markContactSyncedZoho(contactId, result.zohoLeadId);
   }
 
+  await persistOutreachStatus(payload, result);
   notifyContactsListChanged();
   return {
     ...result,
@@ -424,14 +461,18 @@ export function buildQueueItemFromPayload(
   payload: LeadPayload,
   imageBase64?: string,
   errorMessage?: string,
+  appUser?: AppUserIdentity | null,
 ): QueueItem {
   const email = pickPrimaryEmail(payload);
+  const stamped = stampCapturedByFields(
+    { ...(payload as Record<string, unknown>), email, emailAddress: email },
+    appUser ?? null,
+  );
+  const queueId = crypto.randomUUID();
   return {
-    id: crypto.randomUUID(),
+    id: queueId,
     contact_data: {
-      ...(payload as Record<string, unknown>),
-      email,
-      emailAddress: email,
+      ...stamped,
       captureSource: "offline_queue",
     },
     image_base64: imageBase64,
@@ -440,5 +481,8 @@ export function buildQueueItemFromPayload(
     created_at: new Date().toISOString(),
     last_attempt: new Date().toISOString(),
     error_message: errorMessage,
+    capturedByEmail: String(stamped.capturedByEmail || ""),
+    capturedByUserId: String(stamped.capturedByUserId || ""),
+    capturedByPhone: String(stamped.capturedByPhone || ""),
   };
 }

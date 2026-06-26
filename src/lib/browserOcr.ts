@@ -7,7 +7,7 @@ import workerPath from "tesseract.js/dist/worker.min.js?url";
 import corePath from "tesseract.js-core/tesseract-core.wasm.js?url";
 
 /** Minimum width for Tesseract — mobile card crops are often too small without upscaling. */
-const OCR_MIN_WIDTH = 1600;
+const OCR_MIN_WIDTH = 2000;
 
 /** Directory URL for eng.traineddata (public/tessdata, copied to dist on build). */
 function getLangPath(): string {
@@ -29,6 +29,14 @@ function resolveBundledAsset(importedUrl: string): string {
   return new URL(importedUrl, window.location.origin).href;
 }
 
+type OcrPass = { psm: PSM; label: string };
+
+const OCR_PASSES: OcrPass[] = [
+  { psm: PSM.AUTO, label: "auto" },
+  { psm: PSM.SINGLE_BLOCK, label: "block" },
+  { psm: PSM.SPARSE_TEXT, label: "sparse" },
+];
+
 async function createTesseractWorker(): Promise<Worker> {
   const worker = await createWorker("eng", 1, {
     workerPath: resolveBundledAsset(workerPath),
@@ -39,10 +47,22 @@ async function createTesseractWorker(): Promise<Worker> {
     logger: () => undefined,
   });
   await worker.setParameters({
-    tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
     preserve_interword_spaces: "1",
+    user_defined_dpi: "300",
   });
   return worker;
+}
+
+function scoreOcrResult(text: string, confidence: number): number {
+  const trimmed = text.trim();
+  if (!trimmed) return 0;
+  const lines = trimmed.split(/\r?\n/).filter((line) => line.trim().length > 1);
+  const hasEmail = /@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(trimmed);
+  const hasPhone = /\d{7,}/.test(trimmed);
+  let score = trimmed.length * 0.4 + lines.length * 12 + confidence * 0.6;
+  if (hasEmail) score += 40;
+  if (hasPhone) score += 25;
+  return score;
 }
 
 /** Grayscale + contrast boost for Tesseract only — keeps stored/preview images in color. */
@@ -50,7 +70,7 @@ async function fileForOcr(file: File): Promise<File | Blob> {
   if (typeof document === "undefined") return file;
 
   const bitmap = await createImageBitmap(file);
-  const scale = Math.min(3, Math.max(1, OCR_MIN_WIDTH / bitmap.width));
+  const scale = Math.min(3.5, Math.max(1, OCR_MIN_WIDTH / bitmap.width));
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(bitmap.width * scale);
   canvas.height = Math.round(bitmap.height * scale);
@@ -66,8 +86,32 @@ async function fileForOcr(file: File): Promise<File | Blob> {
   preprocessForOCR(canvas);
 
   return new Promise((resolve) => {
-    canvas.toBlob((blob) => resolve(blob ?? file), "image/jpeg", 0.92);
+    canvas.toBlob((blob) => resolve(blob ?? file), "image/png");
   });
+}
+
+async function recognizeWithPasses(
+  worker: Worker,
+  ocrInput: File | Blob,
+): Promise<{ text: string; confidence: number }> {
+  let bestText = "";
+  let bestScore = 0;
+  let bestConfidence = 0;
+
+  for (const pass of OCR_PASSES) {
+    await worker.setParameters({ tessedit_pageseg_mode: pass.psm });
+    const { data } = await worker.recognize(ocrInput);
+    const text = data.text?.trim() || "";
+    const confidence = data.confidence ?? 0;
+    const score = scoreOcrResult(text, confidence);
+    if (score > bestScore) {
+      bestScore = score;
+      bestText = text;
+      bestConfidence = confidence;
+    }
+  }
+
+  return { text: bestText, confidence: bestConfidence };
 }
 
 export async function runBrowserOcr(
@@ -77,11 +121,10 @@ export async function runBrowserOcr(
   try {
     worker = await createTesseractWorker();
     const ocrInput = await fileForOcr(file);
-    const { data } = await worker.recognize(ocrInput);
+    const { text: rawText } = await recognizeWithPasses(worker, ocrInput);
     await worker.terminate();
     worker = null;
 
-    const rawText = data.text?.trim() || "";
     if (!rawText) {
       return {
         contact: parseOcrText(rawText),

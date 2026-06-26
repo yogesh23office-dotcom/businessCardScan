@@ -11,6 +11,9 @@ import { AppLogo } from "@/components/brand/AppLogo";
 import { AuthField } from "@/components/auth/AuthField";
 import { resolvePostAuthPath } from "@/components/auth/AuthGate";
 import { clearAuthTokenCache } from "@/lib/authSession";
+import { invalidateContactsDirectory } from "@/lib/contactsDirectory";
+import { syncProfileFromAuthUser } from "@/lib/authProfileSync";
+import { saveUserSettings } from "@/lib/settingsStorage";
 import { neonAuthConfigIssue, neonAuthUrl } from "@/lib/authConfig";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +29,11 @@ const signUpSchema = z
   .object({
     name: z.string().min(2, "Enter your full name"),
     email: z.string().email("Enter a valid email"),
+    phone: z
+      .string()
+      .min(8, "Enter a valid phone number")
+      .max(20, "Phone number is too long")
+      .regex(/^[\d+\s().-]+$/, "Use digits and + ( ) - only"),
     password: z.string().min(8, "Password must be at least 8 characters"),
     confirmPassword: z.string(),
   })
@@ -89,7 +97,7 @@ export function AuthCredentialsForm({ mode }: { mode: AuthMode }) {
 
   const signUpForm = useForm<SignUpValues>({
     resolver: zodResolver(signUpSchema),
-    defaultValues: { name: "", email: "", password: "", confirmPassword: "" },
+    defaultValues: { name: "", email: "", phone: "", password: "", confirmPassword: "" },
   });
 
   const { data: session, isPending } = authClient.useSession();
@@ -116,8 +124,13 @@ export function AuthCredentialsForm({ mode }: { mode: AuthMode }) {
       }
 
       clearAuthTokenCache();
+      invalidateContactsDirectory();
+      syncProfileFromAuthUser({ email: values.email.trim() });
       toast.success("Welcome back!");
-      await authClient.getSession();
+      const session = await authClient.getSession();
+      if (session.data?.user) {
+        syncProfileFromAuthUser(session.data.user);
+      }
     } catch (error) {
       toast.error(extractErrorMessage(error));
     } finally {
@@ -141,8 +154,18 @@ export function AuthCredentialsForm({ mode }: { mode: AuthMode }) {
       }
 
       clearAuthTokenCache();
+      invalidateContactsDirectory();
+      syncProfileFromAuthUser({
+        name: values.name.trim(),
+        email: values.email.trim(),
+        phone: values.phone.trim(),
+      });
+      saveUserSettings({ phone: values.phone.trim() });
       toast.success("Account created! You're signed in.");
-      await authClient.getSession();
+      const session = await authClient.getSession();
+      if (session.data?.user) {
+        syncProfileFromAuthUser(session.data.user);
+      }
     } catch (error) {
       toast.error(extractErrorMessage(error));
     } finally {
@@ -240,6 +263,14 @@ export function AuthCredentialsForm({ mode }: { mode: AuthMode }) {
             placeholder="you@company.com"
             error={signUpForm.formState.errors.email?.message}
             {...signUpForm.register("email")}
+          />
+          <AuthField
+            label="Phone number"
+            type="tel"
+            autoComplete="tel"
+            placeholder="+91 98765 43210"
+            error={signUpForm.formState.errors.phone?.message}
+            {...signUpForm.register("phone")}
           />
 
           <div className="relative">
